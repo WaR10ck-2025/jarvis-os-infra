@@ -16,7 +16,7 @@ import urllib.parse
 from dataclasses import dataclass
 
 PROXMOX_HOST = os.getenv("PROXMOX_HOST", "https://192.168.10.147:8006")
-PROXMOX_SSH_KEY = os.getenv("PROXMOX_SSH_KEY", "/app/.ssh/proxmox_key")
+PROXMOX_SSH_KEY = os.getenv("PROXMOX_SSH_KEY", "/app/proxmox_key")
 PROXMOX_TOKEN = os.getenv("PROXMOX_TOKEN", "")   # PVEAPIToken=casaos@pve!casaos-bridge-token=<uuid>
 PROXMOX_NODE = os.getenv("PROXMOX_NODE", "pve")
 TEMPLATE_ID = int(os.getenv("PROXMOX_TEMPLATE_ID", "9000"))
