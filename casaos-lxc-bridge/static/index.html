@@ -55,8 +55,24 @@
       font-size: 0.75rem; padding: 2px 8px; border-radius: 20px;
     }
 
+    /* Store Tabs */
+    .store-tabs {
+      display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap;
+    }
+    .tab-btn {
+      padding: 6px 16px; border-radius: 20px; border: 1px solid var(--border);
+      background: var(--surface); color: var(--muted);
+      font-size: 0.8rem; font-weight: 500; cursor: pointer;
+      transition: all 0.15s;
+    }
+    .tab-btn:hover { border-color: var(--accent); color: var(--text); }
+    .tab-btn.active {
+      background: var(--accent); border-color: var(--accent);
+      color: #fff;
+    }
+
     /* Search */
-    .search-wrap { position: relative; margin-bottom: 16px; }
+    .search-wrap { position: relative; margin-bottom: 12px; }
     .search-wrap input {
       width: 100%; max-width: 360px;
       background: var(--surface); border: 1px solid var(--border);
@@ -103,11 +119,20 @@
       display: inline-flex; align-items: center; gap: 4px;
       font-size: 0.7rem; padding: 2px 8px; border-radius: 20px; font-weight: 500;
     }
-    .badge.running  { background: #16a34a22; color: var(--green); }
-    .badge.stopped  { background: #f59e0b22; color: var(--yellow); }
-    .badge.error    { background: #ef444422; color: var(--red); }
-    .badge.installing { background: #4f7cff22; color: var(--accent); }
+    .badge.running     { background: #16a34a22; color: var(--green); }
+    .badge.stopped     { background: #f59e0b22; color: var(--yellow); }
+    .badge.error       { background: #ef444422; color: var(--red); }
+    .badge.installing  { background: #4f7cff22; color: var(--accent); }
     .badge.not_installed { background: transparent; color: var(--muted); }
+
+    /* Source-Badge */
+    .source-badge {
+      font-size: 0.65rem; padding: 1px 7px; border-radius: 20px; font-weight: 600;
+      letter-spacing: 0.03em; align-self: flex-start;
+    }
+    .source-badge.casaos  { background: #0ea5e922; color: #38bdf8; border: 1px solid #0ea5e933; }
+    .source-badge.umbrel  { background: #8b5cf622; color: #a78bfa; border: 1px solid #8b5cf633; }
+    .source-badge.custom  { background: #f59e0b22; color: #fbbf24; border: 1px solid #f59e0b33; }
 
     .btn {
       display: inline-flex; align-items: center; justify-content: center; gap: 6px;
@@ -159,6 +184,8 @@
     .toast.error { border-color: var(--red); }
     .toast.success { border-color: var(--green); }
 
+    .cache-hint { font-size: 0.72rem; color: var(--muted); margin-bottom: 8px; }
+
     .empty { color: var(--muted); font-size: 0.85rem; padding: 12px 0; }
   </style>
 </head>
@@ -203,18 +230,30 @@
     <h2>App-Store Katalog</h2>
     <span class="count" id="catalog-count">…</span>
   </div>
-  <div class="search-wrap">
-    <input type="text" id="catalog-search" placeholder="App suchen…" oninput="filterCatalog()">
+
+  <!-- Store-Tabs -->
+  <div class="store-tabs" id="store-tabs">
+    <button class="tab-btn active" onclick="setSource('all', this)">Alle Stores</button>
+    <button class="tab-btn" onclick="setSource('casaos', this)">CasaOS</button>
+    <button class="tab-btn" onclick="setSource('umbrel', this)">Umbrel</button>
+    <button class="tab-btn" id="tab-custom" onclick="setSource('custom', this)" style="display:none">Custom</button>
   </div>
+
+  <div class="search-wrap">
+    <input type="text" id="catalog-search" placeholder="App suchen…" oninput="onSearch()">
+  </div>
+  <div class="cache-hint" id="cache-hint"></div>
   <div class="app-grid" id="catalog-grid">
-    <div class="empty">Lade Katalog…</div>
+    <div class="empty">Lade Katalog… (kann einige Sekunden dauern)</div>
   </div>
 </section>
 
 <script>
 const API = '';
 let installedApps = {};
-let catalogApps = [];
+let allCatalogApps = [];    // alle Apps aus API (Objekte)
+let currentSource = 'all';
+let currentQ = '';
 let pollingTimers = {};
 
 // ── Helpers ────────────────────────────────────────────────
@@ -232,6 +271,11 @@ function statusBadge(status) {
     installing: '⟳ Installiert…', error: '✗ Fehler', not_installed: ''
   };
   return `<span class="badge ${status}">${labels[status] || status}</span>`;
+}
+
+function sourceBadge(source) {
+  const labels = { casaos: 'CasaOS', umbrel: 'Umbrel', custom: 'Custom' };
+  return `<span class="source-badge ${source}">${labels[source] || source}</span>`;
 }
 
 function iconEl(icon, name) {
@@ -294,7 +338,7 @@ function pollStatus(appId) {
   }, 3000);
 }
 
-// ── Freigeschaltete Apps laden ──────────────────────────────
+// ── Freigeschaltete Apps ──────────────────────────────────
 async function loadPreconfigured() {
   try {
     const r = await fetch(`${API}/bridge/preconfigured`);
@@ -325,14 +369,13 @@ async function loadPreconfigured() {
         </div>`;
     }).join('');
 
-    // Polling für laufende Installationen fortsetzen
     apps.filter(a => a.status === 'installing').forEach(a => pollStatus(a.app_id));
-  } catch (e) {
+  } catch {
     document.getElementById('preconfigured-grid').innerHTML = '<div class="empty">Fehler beim Laden.</div>';
   }
 }
 
-// ── Installierte Apps laden ─────────────────────────────────
+// ── Installierte Apps ─────────────────────────────────────
 async function loadInstalled() {
   try {
     const r = await fetch(`${API}/bridge/list`);
@@ -359,31 +402,71 @@ async function loadInstalled() {
   } catch {}
 }
 
-// ── Katalog laden ────────────────────────────────────────────
+// ── Katalog ───────────────────────────────────────────────
 async function loadCatalog() {
   try {
-    const r = await fetch(`${API}/bridge/catalog`);
+    // Alle Apps laden (Cache im Backend)
+    const r = await fetch(`${API}/bridge/catalog?source=all`);
     const data = await r.json();
-    catalogApps = (data.apps || []).sort();
-    document.getElementById('catalog-count').textContent = catalogApps.length;
-    renderCatalog(catalogApps);
+    allCatalogApps = data.apps || [];
+
+    // Cache-Alter anzeigen
+    if (data.cached_at) {
+      const ageSec = Math.round(Date.now() / 1000 - data.cached_at);
+      const ageStr = ageSec < 60 ? `${ageSec}s` : ageSec < 3600 ? `${Math.round(ageSec/60)}min` : `${Math.round(ageSec/3600)}h`;
+      document.getElementById('cache-hint').textContent = `Cache: ${allCatalogApps.length} Apps, vor ${ageStr} aktualisiert`;
+    }
+
+    // Custom-Tab einblenden wenn vorhanden
+    const hasCustom = allCatalogApps.some(a => a.source === 'custom');
+    document.getElementById('tab-custom').style.display = hasCustom ? '' : 'none';
+
+    applyFilter();
   } catch {
-    document.getElementById('catalog-grid').innerHTML = '<div class="empty">Katalog nicht verfügbar (NextDNS?).</div>';
+    document.getElementById('catalog-grid').innerHTML =
+      '<div class="empty">Katalog nicht verfügbar — Backend lädt noch (Cache wird befüllt).</div>';
   }
+}
+
+function setSource(source, btn) {
+  currentSource = source;
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  applyFilter();
+}
+
+function onSearch() {
+  currentQ = document.getElementById('catalog-search').value.toLowerCase();
+  applyFilter();
+}
+
+function applyFilter() {
+  let apps = allCatalogApps;
+  if (currentSource !== 'all') apps = apps.filter(a => a.source === currentSource);
+  if (currentQ) apps = apps.filter(a =>
+    (a.app_id || '').toLowerCase().includes(currentQ) ||
+    (a.name || '').toLowerCase().includes(currentQ)
+  );
+  document.getElementById('catalog-count').textContent = apps.length;
+  renderCatalog(apps);
 }
 
 function renderCatalog(apps) {
   const grid = document.getElementById('catalog-grid');
   if (!apps.length) { grid.innerHTML = '<div class="empty">Keine Ergebnisse.</div>'; return; }
-  grid.innerHTML = apps.slice(0, 60).map(appId => {
+  const shown = apps.slice(0, 60);
+  grid.innerHTML = shown.map(app => {
+    const appId = app.app_id || app;   // Fallback für bare strings
+    const appName = app.name || appId;
     const isInstalled = !!installedApps[appId];
     return `
       <div class="app-card">
-        <div class="app-icon-fallback">📦</div>
+        ${iconEl(app.icon || '', appName)}
         <div>
-          <div class="app-name">${appId}</div>
-          <div class="app-tagline">CasaOS App Store</div>
+          <div class="app-name">${appName}</div>
+          <div class="app-tagline">${app.category || ''}</div>
         </div>
+        ${app.source ? sourceBadge(app.source) : ''}
         ${isInstalled ? statusBadge(installedApps[appId].status) : ''}
         <div class="card-actions">
           ${!isInstalled
@@ -399,16 +482,11 @@ function renderCatalog(apps) {
   }
 }
 
-function filterCatalog() {
-  const q = document.getElementById('catalog-search').value.toLowerCase();
-  renderCatalog(q ? catalogApps.filter(a => a.toLowerCase().includes(q)) : catalogApps);
-}
-
-// ── Init ────────────────────────────────────────────────────
+// ── Init ─────────────────────────────────────────────────
 (async () => {
   await loadInstalled();
   await loadPreconfigured();
-  loadCatalog();  // nicht awaiten — lädt langsam via GitHub API
+  loadCatalog();
 })();
 </script>
 </body>

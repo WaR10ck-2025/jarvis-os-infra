@@ -101,7 +101,7 @@ def install(
 
         # 3. Compose-Datei im LXC ablegen (shell-sicher via pct push)
         app_dir = f"/opt/{meta.app_id}"
-        compose_content = _patch_compose(meta)
+        compose_content = _patch_compose(meta, ip=ip)
         proxmox.exec_in_lxc(lxc_id, f"mkdir -p {app_dir}")
         proxmox.push_file_to_lxc(lxc_id, compose_content, f"{app_dir}/docker-compose.yml")
 
@@ -171,20 +171,47 @@ def _wait_for_network(ip: str, timeout: int = 60) -> None:
     raise TimeoutError(f"LXC {ip} nicht im Netzwerk nach {timeout}s")
 
 
-def _patch_compose(meta: AppMeta) -> str:
+def _strip_app_proxy(compose: str) -> str:
+    """Entfernt den app_proxy-Service-Block (Umbrel-spezifischer Reverse-Proxy)."""
+    import re
+    # Entfernt eingerückten Block unter "  app_proxy:" (2-Leerzeichen-Einrückung)
+    return re.sub(r'  app_proxy:\n(    [^\n]*\n)*', '', compose)
+
+
+def _patch_compose(meta: AppMeta, ip: str = "") -> str:
     """
-    Ersetzt CasaOS-spezifische Magic-Variables in docker-compose.yml:
-      ${WEBUI_PORT} → meta.port
-      ${AppID}      → meta.app_id
-      /DATA/AppData/${AppID} → /opt/<app_id>/data
+    Ersetzt store-spezifische Magic-Variables in docker-compose.yml.
+
+    CasaOS-Variablen:
+      ${WEBUI_PORT}, ${AppID}, /DATA/AppData/${AppID}, ${PUID}, ${PGID}, ${TZ}
+
+    Umbrel-Variablen:
+      ${APP_DATA_DIR}, ${APP_PORT}, ${APP_DOMAIN}, ${NETWORK_IP},
+      ${APP_PASSWORD}, ${TOR_*}, restliche ${APP_*}
     """
+    import re
     compose = meta.compose_yaml
-    compose = compose.replace("${WEBUI_PORT}", str(meta.port))
-    compose = compose.replace("${WEBUI_PORT:-" + str(meta.port) + "}", str(meta.port))
-    compose = compose.replace("${AppID}", meta.app_id)
-    compose = compose.replace(f"/DATA/AppData/{meta.app_id}", f"/opt/{meta.app_id}/data")
-    compose = compose.replace("/DATA/AppData/$AppID", f"/opt/{meta.app_id}/data")
-    # PUID/PGID auf root setzen (vereinfacht, LXC ist isoliert)
+
+    if meta.store_type == "umbrel":
+        compose = _strip_app_proxy(compose)
+        compose = compose.replace("${APP_DATA_DIR}", f"/opt/{meta.app_id}/data")
+        compose = compose.replace("${APP_PORT}", str(meta.port))
+        compose = compose.replace("${APP_DOMAIN}", ip or "localhost")
+        compose = compose.replace("${NETWORK_IP}", ip or "")
+        compose = compose.replace("${APP_PASSWORD}", "changeme123")
+        # Tor-Variablen → leer
+        compose = re.sub(r'\$\{TOR_[^}]+\}', '', compose)
+        # Restliche ${APP_*} → leer
+        compose = re.sub(r'\$\{APP_[^}]+\}', '', compose)
+    else:
+        # CasaOS-Variablen
+        compose = compose.replace("${WEBUI_PORT}", str(meta.port))
+        compose = compose.replace("${WEBUI_PORT:-" + str(meta.port) + "}", str(meta.port))
+        compose = compose.replace("${AppID}", meta.app_id)
+        compose = compose.replace(f"/DATA/AppData/{meta.app_id}", f"/opt/{meta.app_id}/data")
+        compose = compose.replace("/DATA/AppData/$AppID", f"/opt/{meta.app_id}/data")
+
+    # Gemeinsame Variablen (beide Store-Typen)
     compose = compose.replace("${PUID}", "0")
     compose = compose.replace("${PGID}", "0")
     compose = compose.replace("${TZ}", "Europe/Berlin")

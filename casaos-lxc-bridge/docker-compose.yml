@@ -13,6 +13,10 @@ services:
       - CASAOS_API_URL=${CASAOS_API_URL:-http://192.168.10.141/v2/apps}
       - CASAOS_API_TOKEN=${CASAOS_API_TOKEN:-}
       - CASAOS_CUSTOM_STORES=${CASAOS_CUSTOM_STORES:-}
+      - UMBREL_STORE_ENABLED=${UMBREL_STORE_ENABLED:-true}
+      - CUSTOM_STORES=${CUSTOM_STORES:-}
+      - BRIDGE_URL=${BRIDGE_URL:-http://192.168.10.141:8200}
+      - BRIDGE_LXC_ID=${BRIDGE_LXC_ID:-120}
       - BRIDGE_DB_PATH=/data/apps.db
       - PROXMOX_SSH_KEY=/app/proxmox_key
     volumes:
