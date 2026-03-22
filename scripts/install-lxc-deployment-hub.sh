@@ -88,6 +88,9 @@ ENVEOF
   echo 'HINWEIS: .env angelegt — Proxmox API-Token eintragen!'
 fi
 
+# install.sh erwartet Repo unter ~/docker/GitHub-Deployment-Connector
+# (HTTPS-Clone wuerde scheitern — Symlink auf bereits geklontes Verzeichnis)
+ln -sf '$DEPLOY_DIR' /root/docker/GitHub-Deployment-Connector 2>/dev/null || true
 bash '$DEPLOY_DIR/scripts/server/install.sh'
 "
 
