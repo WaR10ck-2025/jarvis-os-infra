@@ -37,7 +37,10 @@ fi
 
 if ! pct status "$LXC_ID" | grep -q "running"; then
   pct start "$LXC_ID"
-  sleep 5
+  for i in $(seq 1 30); do
+    pct exec "$LXC_ID" -- test -f /etc/hostname 2>/dev/null && break
+    sleep 1
+  done
 fi
 
 pct exec "$LXC_ID" -- bash -c "

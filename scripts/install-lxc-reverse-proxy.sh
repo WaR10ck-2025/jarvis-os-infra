@@ -33,7 +33,10 @@ fi
 # Starten falls nicht läuft
 if ! pct status "$LXC_ID" | grep -q "running"; then
   pct start "$LXC_ID"
-  sleep 5
+  for i in $(seq 1 30); do
+    pct exec "$LXC_ID" -- test -f /etc/hostname 2>/dev/null && break
+    sleep 1
+  done
 fi
 
 # Nginx Proxy Manager installieren
@@ -73,7 +76,7 @@ EOF
 
 cd /opt/nginx-proxy-manager
 docker compose pull --quiet 2>/dev/null || docker-compose pull --quiet 2>/dev/null || true
-docker compose up -d 2>/dev/null || docker-compose up -d 2>/dev/null
+docker compose up -d || docker-compose up -d
 echo 'Nginx Proxy Manager gestartet'
 "
 

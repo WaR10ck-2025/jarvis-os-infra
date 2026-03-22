@@ -74,7 +74,7 @@ fi
 
 # ── Schritt 4: Debian 12 LXC Template ────────────────────────────────────
 log_section "Debian 12 Template herunterladen"
-pveam update 2>&1 | tail -1
+pveam update 2>&1 | tail -1 || log "⚠ pveam update fehlgeschlagen — fahre mit bestehendem Cache fort"
 if ! pveam list local 2>/dev/null | grep -q "$TEMPLATE"; then
   pveam download local "$TEMPLATE"
   log "✓ Template heruntergeladen"
