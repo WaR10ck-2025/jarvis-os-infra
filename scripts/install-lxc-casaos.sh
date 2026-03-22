@@ -26,7 +26,7 @@ if ! pct status "$LXC_ID" &>/dev/null; then
     --cores "$CORES" \
     --rootfs "$STORAGE:$DISK" \
     --net0 "name=eth0,bridge=vmbr0,ip=${LXC_IP}/24,gw=192.168.10.1" \
-    --nameserver "192.168.10.1" \
+    --nameserver "1.1.1.1" \
     --features "nesting=1" \
     --unprivileged 1 \
     --start 0
@@ -55,12 +55,44 @@ command -v casaos &>/dev/null || { echo "CasaOS-Installation fehlgeschlagen"; ex
 echo 'CasaOS installiert'
 "
 
+# casaos-lxc-bridge installieren
+BRIDGE_SRC="/root/openclaw-proxmox/casaos-lxc-bridge"
+if [ -d "$BRIDGE_SRC" ]; then
+  pct exec "$LXC_ID" -- bash -c "
+set -e
+export DEBIAN_FRONTEND=noninteractive
+apt-get install -y -qq git
+git clone https://github.com/WaR10ck-2025/openclaw-proxmox.git /opt/openclaw-proxmox 2>/dev/null || \
+  (cd /opt/openclaw-proxmox && git pull)
+bash /opt/openclaw-proxmox/casaos-lxc-bridge/install.sh
+"
+  echo "  ✓ casaos-lxc-bridge installiert (http://${LXC_IP}:8200)"
+else
+  echo "  ⚠  casaos-lxc-bridge Quellcode nicht gefunden — manuell installieren:"
+  echo "     pct exec $LXC_ID -- bash /opt/openclaw-proxmox/casaos-lxc-bridge/install.sh"
+fi
+
 echo "  ✓ LXC $LXC_ID ($HOSTNAME): http://${LXC_IP}"
 echo ""
-echo "  Nächste Schritte für CasaOS → Proxmox-Integration:"
-echo "  1. Auf Proxmox-Host: Proxmox API-Token erstellen"
-echo "     pveum user add casaos@pve && pveum acl modify / --users casaos@pve --roles PVEAuditor"
-echo "     pveum user token add casaos@pve casaos-token --privsep=0"
-echo "  2. In CasaOS Web-UI: Einstellungen → Proxmox"
+echo "  Nächste Schritte:"
+echo ""
+echo "  1. LXC-App-Template erstellen (einmalig auf Proxmox-Host):"
+echo "     bash /root/openclaw-proxmox/scripts/install-lxc-app-template.sh"
+echo ""
+echo "  2. Proxmox API-Token für casaos-lxc-bridge erstellen:"
+echo "     pveum user add casaos@pve 2>/dev/null || true"
+echo "     pveum acl modify / --users casaos@pve --roles PVEVMAdmin"
+echo "     pveum user token add casaos@pve casaos-bridge-token --privsep=0"
+echo "     # Token-UUID in CasaOS-LXC eintragen:"
+echo "     pct exec $LXC_ID -- nano /opt/openclaw-proxmox/casaos-lxc-bridge/.env"
+echo ""
+echo "  3. Bridge-Endpunkte testen:"
+echo "     curl http://${LXC_IP}:8200/health"
+echo "     curl http://${LXC_IP}:8200/bridge/catalog"
+echo ""
+echo "  4. Erste App installieren (Beispiel n8n):"
+echo "     curl -X POST 'http://${LXC_IP}:8200/bridge/install?appid=N8n'"
+echo ""
+echo "  5. CasaOS Dashboard → Einstellungen → Proxmox:"
 echo "     Host: https://192.168.10.147:8006"
 echo "     Token-ID: casaos@pve!casaos-token"

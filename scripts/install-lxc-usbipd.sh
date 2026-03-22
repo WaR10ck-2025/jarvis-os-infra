@@ -28,7 +28,7 @@ if ! pct status "$LXC_ID" &>/dev/null; then
     --cores "$CORES" \
     --rootfs "$STORAGE:$DISK" \
     --net0 "name=eth0,bridge=vmbr0,ip=${LXC_IP}/24,gw=192.168.10.1" \
-    --nameserver "192.168.10.1" \
+    --nameserver "1.1.1.1" \
     --features "nesting=0" \
     --unprivileged 0 \
     --start 0
