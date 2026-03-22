@@ -15,8 +15,8 @@ HOSTNAME="usbipd"
 RAM=128
 DISK=2
 CORES=1
-TEMPLATE="local:vztmpl/debian-12-standard_12.7-1_amd64.tar.zst"
-STORAGE="${STORAGE:-local-lvm}"
+TEMPLATE="local:vztmpl/debian-12-standard_12.12-1_amd64.tar.zst"
+STORAGE="${STORAGE:-local-zfs}"
 
 echo "► LXC $LXC_ID ($HOSTNAME) — $LXC_IP..."
 

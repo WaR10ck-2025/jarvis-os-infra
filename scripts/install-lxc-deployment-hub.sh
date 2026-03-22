@@ -12,7 +12,7 @@ RAM=512
 DISK=8
 CORES=1
 TEMPLATE="local:vztmpl/debian-12-standard_12.12-1_amd64.tar.zst"
-STORAGE="${STORAGE:-local-lvm}"
+STORAGE="${STORAGE:-local-zfs}"
 REPO_URL="git@github.com:WaR10ck-2025/GitHub-Deployment-Connector.git"
 DEPLOY_DIR="/root/docker/deployment-hub"
 

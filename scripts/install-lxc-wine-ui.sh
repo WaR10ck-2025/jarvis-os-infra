@@ -10,8 +10,8 @@ HOSTNAME="wine-ui"
 RAM=256
 DISK=4
 CORES=1
-TEMPLATE="local:vztmpl/debian-12-standard_12.7-1_amd64.tar.zst"
-STORAGE="${STORAGE:-local-lvm}"
+TEMPLATE="local:vztmpl/debian-12-standard_12.12-1_amd64.tar.zst"
+STORAGE="${STORAGE:-local-zfs}"
 REPO_URL="https://github.com/WaR10ck-2025/wine-docker-manager.git"
 DEPLOY_DIR="/root/docker/wine-manager"
 

@@ -15,8 +15,8 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-TEMPLATE="debian-12-standard_12.7-1_amd64.tar.zst"
-STORAGE="local-lvm"     # Proxmox Storage für Disks
+TEMPLATE="debian-12-standard_12.12-1_amd64.tar.zst"
+STORAGE="local-zfs"     # Proxmox Storage für Disks
 TEMPLATE_STORAGE="local" # Storage für Templates
 
 echo "╔══════════════════════════════════════════════════════════════╗"
@@ -35,6 +35,29 @@ if ! command -v pct &>/dev/null; then
   echo "✗ pct nicht gefunden — kein Proxmox-Host?" >&2
   exit 1
 fi
+
+# ── Schritt 0: SSH-Key-Setup (einmalig) ────────────────────────────────────
+echo "► Schritt 0: SSH-Key für Proxmox-Host prüfen..."
+SSH_KEY="$HOME/.ssh/proxmox_key"
+if [ ! -f "$SSH_KEY" ]; then
+  mkdir -p "$HOME/.ssh"
+  ssh-keygen -t ed25519 -f "$SSH_KEY" -N "" -C "openclaw-proxmox-deploy" -q
+  echo "  ✓ SSH-Key erstellt: $SSH_KEY"
+fi
+# Public Key idempotent in authorized_keys eintragen
+mkdir -p "$HOME/.ssh"
+touch "$HOME/.ssh/authorized_keys"
+chmod 600 "$HOME/.ssh/authorized_keys"
+if ! grep -qF "$(cat "${SSH_KEY}.pub")" "$HOME/.ssh/authorized_keys" 2>/dev/null; then
+  cat "${SSH_KEY}.pub" >> "$HOME/.ssh/authorized_keys"
+  echo "  ✓ SSH-Key in authorized_keys eingetragen"
+else
+  echo "  ✓ SSH-Key bereits in authorized_keys"
+fi
+HOST_IP=$(hostname -I | awk '{print $1}')
+echo "  → Private Key auf Workstation kopieren: scp root@${HOST_IP}:${SSH_KEY} ~/.ssh/proxmox_key"
+echo "  → Künftig: ssh -i ~/.ssh/proxmox_key root@${HOST_IP}"
+echo ""
 
 # ── Schritt 1: Template prüfen ─────────────────────────────────────────────
 echo "► Schritt 1: Debian 12 Template prüfen..."

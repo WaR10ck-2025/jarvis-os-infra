@@ -15,7 +15,7 @@ RAM=2048
 DISK=32
 CORES=2
 TEMPLATE="local:vztmpl/debian-12-standard_12.12-1_amd64.tar.zst"
-STORAGE="${STORAGE:-local-lvm}"
+STORAGE="${STORAGE:-local-zfs}"
 CASAOS_API="http://192.168.10.141/v2/apps"
 
 echo "► LXC $LXC_ID ($HOSTNAME) — $LXC_IP..."
