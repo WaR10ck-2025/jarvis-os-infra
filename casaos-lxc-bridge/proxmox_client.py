@@ -42,7 +42,7 @@ class ProxmoxClient:
 
     def _request(self, method: str, path: str, data: dict | None = None) -> dict:
         url = f"{PROXMOX_HOST}/api2/json{path}"
-        body = json.dumps(data).encode() if data else None
+        body = json.dumps(data if data is not None else {}).encode() if method in ("POST", "PUT", "PATCH") else None
         req = urllib.request.Request(
             url,
             data=body,
