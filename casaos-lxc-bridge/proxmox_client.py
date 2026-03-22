@@ -130,27 +130,41 @@ class ProxmoxClient:
         result = self._request("GET", f"/nodes/{PROXMOX_NODE}/lxc/{lxc_id}/status/current")
         return result.get("data", {}).get("status", "unknown")
 
-    def exec_in_lxc(self, lxc_id: int, command: str) -> None:
-        """Führt Shell-Befehl im LXC aus — via SSH zum Proxmox-Host + pct exec."""
+    def _ssh_run(self, remote_cmd: str, timeout: int = 300) -> subprocess.CompletedProcess:
+        """Führt Befehl via SSH auf dem Proxmox-Host aus."""
         import subprocess, re, tempfile, shutil, stat, os
         host_ip = re.sub(r"https?://([^:/]+).*", r"\1", PROXMOX_HOST)
-        # Tempfile mit 0600 — Docker-Volume-Mount übernimmt Berechtigungen nicht immer korrekt
         tmp_key = tempfile.mktemp(suffix=".key")
         try:
             shutil.copy2(PROXMOX_SSH_KEY, tmp_key)
             os.chmod(tmp_key, stat.S_IRUSR | stat.S_IWUSR)
-            ssh_cmd = [
-                "ssh", "-i", tmp_key,
-                "-o", "StrictHostKeyChecking=no",
-                "-o", "ConnectTimeout=10",
-                f"root@{host_ip}",
-                f"pct exec {lxc_id} -- bash -c {repr(command)}",
-            ]
-            result = subprocess.run(ssh_cmd, capture_output=True, text=True, timeout=300)
+            return subprocess.run(
+                ["ssh", "-i", tmp_key, "-o", "StrictHostKeyChecking=no",
+                 "-o", "ConnectTimeout=10", f"root@{host_ip}", remote_cmd],
+                capture_output=True, text=True, timeout=timeout,
+            )
         finally:
             try:
                 os.unlink(tmp_key)
             except OSError:
                 pass
+
+    def exec_in_lxc(self, lxc_id: int, command: str) -> None:
+        """Führt Shell-Befehl im LXC aus — via SSH + pct exec, Befehl base64-kodiert."""
+        import base64
+        # Base64-Encoding vermeidet alle Shell-Escaping-Probleme
+        cmd_b64 = base64.b64encode(command.encode()).decode()
+        remote = f"pct exec {lxc_id} -- bash -c \"echo {cmd_b64} | base64 -d | bash\""
+        result = self._ssh_run(remote)
         if result.returncode != 0:
             raise RuntimeError(f"pct exec failed (SSH): {result.stderr}")
+
+    def push_file_to_lxc(self, lxc_id: int, content: str, remote_path: str) -> None:
+        """Überträgt Datei-Inhalt in den LXC via pct push (Shell-sicher via base64)."""
+        import base64
+        content_b64 = base64.b64encode(content.encode()).decode()
+        tmp = f"/tmp/bridge_{lxc_id}_{abs(hash(remote_path)) % 100000}.tmp"
+        remote = f"printf '%s' {content_b64} | base64 -d > {tmp} && pct push {lxc_id} {tmp} {remote_path} && rm -f {tmp}"
+        result = self._ssh_run(remote)
+        if result.returncode != 0:
+            raise RuntimeError(f"pct push failed (SSH): {result.stderr}")

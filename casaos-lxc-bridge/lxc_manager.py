@@ -99,13 +99,11 @@ def install(
         proxmox.start_lxc(lxc_id)
         _wait_for_network(ip)
 
-        # 3. Compose-Datei im LXC ablegen
+        # 3. Compose-Datei im LXC ablegen (shell-sicher via pct push)
         app_dir = f"/opt/{meta.app_id}"
         compose_content = _patch_compose(meta)
         proxmox.exec_in_lxc(lxc_id, f"mkdir -p {app_dir}")
-        # Datei via heredoc übertragen
-        escaped = compose_content.replace("'", "'\\''")
-        proxmox.exec_in_lxc(lxc_id, f"cat > {app_dir}/docker-compose.yml << 'COMPOSE_EOF'\n{escaped}\nCOMPOSE_EOF")
+        proxmox.push_file_to_lxc(lxc_id, compose_content, f"{app_dir}/docker-compose.yml")
 
         # 4. Docker Compose starten
         proxmox.exec_in_lxc(lxc_id, f"cd {app_dir} && docker compose up -d")
