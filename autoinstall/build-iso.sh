@@ -28,22 +28,36 @@ WORK_DIR="/tmp/proxmox-openclaw-build"
 OUTPUT_ISO="$SCRIPT_DIR/proxmox-openclaw.iso"
 PVE_ISO=""
 WRITE_TO_USB=""
+INTERACTIVE=false
 
 # Parameter parsen
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --pve-iso) PVE_ISO="$2"; shift 2 ;;
     --output)  WRITE_TO_USB="$2"; shift 2 ;;
+    --interactive|--guided) INTERACTIVE=true; shift ;;
     --help|-h)
-      echo "Verwendung: $0 [--pve-iso /path/to.iso] [--output /dev/sdX]"
+      echo "Verwendung: $0 [--pve-iso /path/to.iso] [--output /dev/sdX] [--interactive]"
+      echo ""
+      echo "  (ohne --interactive)  Vollautomatische Installation via answer.toml"
+      echo "  --interactive         Benutzergeführter Proxmox-Wizard + automatischer first-boot"
       exit 0 ;;
     *) echo "Unbekannter Parameter: $1"; exit 1 ;;
   esac
 done
 
+if $INTERACTIVE; then
+  OUTPUT_ISO="$SCRIPT_DIR/proxmox-openclaw-interactive.iso"
+fi
+
 echo "╔══════════════════════════════════════════════════════════╗"
 echo "║       OpenClaw OS — Custom Proxmox ISO Builder         ║"
 echo "╚══════════════════════════════════════════════════════════╝"
+if $INTERACTIVE; then
+  echo "  Modus: INTERAKTIV (Proxmox-Wizard + automatischer first-boot)"
+else
+  echo "  Modus: AUTOMATISCH (vollständig via answer.toml)"
+fi
 echo ""
 
 # Root-Check
@@ -117,25 +131,21 @@ mkdir -p "$WORK_DIR"/{iso-extract,squashfs-extract,iso-new}
 if $USE_PVE_ASSISTANT; then
   echo "  Verwende proxmox-auto-install-assistant..."
 
-  # answer.toml + first-boot Scripts in ein Verzeichnis kopieren
-  mkdir -p "$WORK_DIR/inject"
-  cp "$SCRIPT_DIR/answer.toml" "$WORK_DIR/inject/"
-
-  # First-boot Scripts (werden nach Installation in /root/ platziert)
-  cp "$SCRIPT_DIR/first-boot.sh" "$WORK_DIR/inject/openclaw-first-boot.sh"
-  cp "$SCRIPT_DIR/first-boot.service" "$WORK_DIR/inject/openclaw-first-boot.service"
-  cp "$SCRIPT_DIR/yubikey-enroll.sh" "$WORK_DIR/inject/" 2>/dev/null || true
-  cp "$SCRIPT_DIR/zfs-unlock.sh" "$WORK_DIR/inject/" 2>/dev/null || true
-  cp "$SCRIPT_DIR/zfs-unlock.service" "$WORK_DIR/inject/" 2>/dev/null || true
-  cp "$SCRIPT_DIR/zfs-pool-create.sh" "$WORK_DIR/inject/" 2>/dev/null || true
-
-  proxmox-auto-install-assistant prepare-iso "$PVE_ISO" \
-    --answer-file "$WORK_DIR/inject/answer.toml" \
-    --output "$OUTPUT_ISO"
-
-  echo "  ✓ ISO mit answer.toml erstellt (auto-install-assistant)"
-  echo "  ℹ  First-boot Scripts müssen nach Installation manuell deployt werden."
-  echo "     Oder: manueller ISO-Bau für vollständige Automatisierung."
+  if $INTERACTIVE; then
+    # Interaktiv: first-boot injizieren, KEIN answer.toml → Proxmox-Wizard läuft normal
+    proxmox-auto-install-assistant prepare-iso "$PVE_ISO" \
+      --on-first-boot "$SCRIPT_DIR/first-boot.sh" \
+      --output "$OUTPUT_ISO"
+    echo "  ✓ Interaktive ISO erstellt — Proxmox-Wizard aktiv, first-boot.sh injiziert"
+  else
+    # Automatisch: answer.toml triggert vollautomatische Installation
+    proxmox-auto-install-assistant prepare-iso "$PVE_ISO" \
+      --answer-file "$SCRIPT_DIR/answer.toml" \
+      --output "$OUTPUT_ISO"
+    echo "  ✓ Automatische ISO erstellt (answer.toml + auto-install-assistant)"
+    echo "  ℹ  First-boot Scripts müssen nach Installation manuell deployt werden."
+    echo "     Oder: manueller ISO-Bau (ohne proxmox-auto-install-assistant) für vollständige Automatisierung."
+  fi
 
 # ── Modus B: Manueller ISO-Bau mit squashfs-Modifikation ─────────────────
 else
@@ -152,8 +162,13 @@ else
   ls "$WORK_DIR/iso-extract/"
 
   # answer.toml ins ISO-Root legen (Proxmox liest es beim Booten von dort)
-  echo "  answer.toml → ISO-Root..."
-  cp "$SCRIPT_DIR/answer.toml" "$WORK_DIR/iso-extract/answer.toml"
+  # Im interaktiven Modus wird answer.toml NICHT kopiert → Installer-Wizard bleibt aktiv
+  if ! $INTERACTIVE; then
+    echo "  answer.toml → ISO-Root..."
+    cp "$SCRIPT_DIR/answer.toml" "$WORK_DIR/iso-extract/answer.toml"
+  else
+    echo "  ℹ  Interaktiver Modus — answer.toml wird nicht injiziert (Wizard aktiv)"
+  fi
 
   # squashfs Installer-Dateisystem extrahieren (für first-boot Injection)
   SQUASH_FILE=$(find "$WORK_DIR/iso-extract" -name "*.squashfs" -o -name "pve-base.squashfs" 2>/dev/null | head -1)
@@ -263,8 +278,15 @@ if [ -n "$WRITE_TO_USB" ]; then
 fi
 
 echo "  Nächste Schritte nach Installation:"
-echo "    1. USB booten → Proxmox installiert sich automatisch"
-echo "    2. Neustart → LUKS-Passphrase eingeben"
-echo "    3. first-boot.service startet LXC 10/20/107"
-echo "    4. Browser: http://<IP> → CasaOS App-Store"
+if $INTERACTIVE; then
+  echo "    1. USB booten → Proxmox Installer-Wizard erscheint"
+  echo "    2. Disk, Hostname, Passwort im Wizard konfigurieren → Installieren"
+  echo "    3. Neustart → first-boot.service startet LXC 110/120/170"
+  echo "    4. Browser: http://<IP> → CasaOS App-Store"
+else
+  echo "    1. USB booten → Proxmox installiert sich automatisch (kein Input)"
+  echo "    2. Neustart → LUKS-Passphrase eingeben"
+  echo "    3. first-boot.service startet LXC 110/120/170"
+  echo "    4. Browser: http://<IP> → CasaOS App-Store"
+fi
 echo ""

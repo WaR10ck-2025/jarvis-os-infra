@@ -1,7 +1,16 @@
 # OpenClaw OS — Custom Proxmox Installer
 
-Bootfähiges USB-Image / ISO das Proxmox VE automatisch installiert und
+Bootfähiges USB-Image / ISO das Proxmox VE installiert und
 die OpenClaw Basis-Plattform (CasaOS + Deployment Hub + Nginx Proxy) deployt.
+
+**Zwei ISO-Varianten stehen zur Verfügung:**
+
+| ISO | Installations-Phase | Wann verwenden |
+|---|---|---|
+| `proxmox-openclaw.iso` | Vollautomatisch (kein Input) | Headless-Server, CI/CD, Reproduzierbarkeit |
+| `proxmox-openclaw-interactive.iso` | Proxmox-Wizard (Benutzer wählt Disk/Passwort) | Neue Hardware, individuelle Konfiguration |
+
+Beide ISOs deployen nach der Installation **automatisch** LXC 110/120/170.
 
 ---
 
@@ -9,18 +18,18 @@ die OpenClaw Basis-Plattform (CasaOS + Deployment Hub + Nginx Proxy) deployt.
 
 | Phase | Was | Dauer |
 |---|---|---|
-| **Boot** | Proxmox VE 8.x Installer (automatisch) | ~3 Min |
-| **Neustart** | LUKS2 Disk-Verschlüsselung aktiv | → Passphrase eingeben |
-| **First-Boot** | LXC 10: Nginx Proxy Manager | ~5 Min |
-| | LXC 20: CasaOS App-Store Dashboard | |
-| | LXC 107: GitHub Deployment Hub | |
+| **Boot** | Proxmox VE Installer | ~3 Min |
+| **Neustart** | System startet (interaktiv: LUKS-Passphrase aus Wizard) | — |
+| **First-Boot** | LXC 110: Nginx Proxy Manager | ~5 Min |
+| | LXC 120: CasaOS App-Store Dashboard | |
+| | LXC 170: GitHub Deployment Hub | |
 | **Danach** | Weitere Services über CasaOS on demand | — |
 
 **Gesamt: ~8-10 Minuten bis zur fertigen Basis-Plattform.**
 
 ---
 
-## Schritt 1 — answer.toml anpassen
+## Schritt 1 — answer.toml anpassen (nur für automatische ISO)
 
 ```toml
 # autoinstall/answer.toml öffnen:
@@ -29,8 +38,8 @@ disk_password = "SICHERES-LUKS-PASSWORT"       # Disk-Verschlüsselung
 fqdn = "mein-server.local"                     # Hostname
 ```
 
-> **Wichtig:** Beide Passwörter **vor dem Build** setzen!
-> `disk_password` = LUKS-Passphrase (wird bei jedem Boot benötigt).
+> **Nur relevant für die automatische ISO.** Bei der interaktiven ISO werden
+> Passwort und Hostname im Installer-Wizard eingegeben.
 
 ---
 
@@ -46,19 +55,26 @@ apt install xorriso squashfs-tools p7zip-full syslinux-utils curl git
 apt install proxmox-auto-install-assistant
 ```
 
-### ISO bauen
+### Automatische ISO bauen
 
 ```bash
 cd openclaw-proxmox/autoinstall
 
-# Proxmox VE ISO herunterladen (oder eigene angeben):
-# https://www.proxmox.com/proxmox-virtual-environment/get-started
-# → "Download" → ISO herunterladen
-
-# ISO erstellen:
+# answer.toml anpassen (Passwörter setzen) — dann:
 sudo bash build-iso.sh --pve-iso /path/to/proxmox-ve_8.x.iso
 
-# Output: proxmox-openclaw.iso (ca. 1 GB)
+# Output: proxmox-openclaw.iso
+```
+
+### Interaktive ISO bauen
+
+```bash
+cd openclaw-proxmox/autoinstall
+
+# Kein answer.toml nötig — Proxmox-Wizard fragt alles ab
+sudo bash build-iso.sh --interactive --pve-iso /path/to/proxmox-ve_8.x.iso
+
+# Output: proxmox-openclaw-interactive.iso
 ```
 
 ---
@@ -73,28 +89,40 @@ lsblk   # oder: fdisk -l
 
 # Auf USB schreiben (VORSICHT — alle Daten werden gelöscht!):
 dd if=proxmox-openclaw.iso of=/dev/sdX bs=4M status=progress
+# oder:
+dd if=proxmox-openclaw-interactive.iso of=/dev/sdX bs=4M status=progress
 sync
 ```
 
 ### Windows
 
-- **Balena Etcher** (https://etcher.balena.io) → proxmox-openclaw.iso → USB-Stick
+- **Balena Etcher** → gewünschte ISO → USB-Stick
 - **Rufus** → DD-Modus
 
 ### Alternativ: direkt beim Build
 
 ```bash
 sudo bash build-iso.sh --pve-iso proxmox-ve_8.x.iso --output /dev/sdX
+sudo bash build-iso.sh --interactive --pve-iso proxmox-ve_8.x.iso --output /dev/sdX
 ```
 
 ---
 
-## Schritt 4 — Booten und installieren
+## Schritt 4a — Booten (Automatische ISO)
 
 1. USB-Stick einstecken → Zielrechner einschalten
 2. Boot-Reihenfolge: USB-Stick (BIOS/UEFI → Boot Menu)
 3. Proxmox installiert sich **automatisch** (kein Input nötig)
 4. Neustart → **LUKS-Passphrase eingeben** (aus answer.toml → `disk_password`)
+5. `openclaw-first-boot.service` startet automatisch (~5 Min)
+6. Logs verfolgen: `journalctl -u openclaw-first-boot -f`
+
+## Schritt 4b — Booten (Interaktive ISO)
+
+1. USB-Stick einstecken → Zielrechner einschalten
+2. Boot-Reihenfolge: USB-Stick (BIOS/UEFI → Boot Menu)
+3. **Proxmox-Installer-Wizard** erscheint → Disk, Hostname, Passwort konfigurieren
+4. Installation starten → Neustart
 5. `openclaw-first-boot.service` startet automatisch (~5 Min)
 6. Logs verfolgen: `journalctl -u openclaw-first-boot -f`
 
