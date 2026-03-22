@@ -127,27 +127,22 @@ echo "► ISO vorbereiten..."
 rm -rf "$WORK_DIR"
 mkdir -p "$WORK_DIR"/{iso-extract,squashfs-extract,iso-new}
 
-# ── Modus A: proxmox-auto-install-assistant ───────────────────────────────
-if $USE_PVE_ASSISTANT; then
-  echo "  Verwende proxmox-auto-install-assistant..."
+# ── Modus A: proxmox-auto-install-assistant (nur für automatischen Modus) ─
+# Hinweis: proxmox-auto-install-assistant erfordert immer --fetch-from + answer.toml.
+# Im interaktiven Modus wird daher immer Modus B (squashfs) verwendet.
+if $USE_PVE_ASSISTANT && ! $INTERACTIVE; then
+  echo "  Verwende proxmox-auto-install-assistant (automatischer Modus)..."
 
-  if $INTERACTIVE; then
-    # Interaktiv: first-boot injizieren, KEIN answer.toml → Proxmox-Wizard läuft normal
-    proxmox-auto-install-assistant prepare-iso "$PVE_ISO" \
-      --on-first-boot "$SCRIPT_DIR/first-boot.sh" \
-      --output "$OUTPUT_ISO"
-    echo "  ✓ Interaktive ISO erstellt — Proxmox-Wizard aktiv, first-boot.sh injiziert"
-  else
-    # Automatisch: answer.toml triggert vollautomatische Installation
-    proxmox-auto-install-assistant prepare-iso "$PVE_ISO" \
-      --answer-file "$SCRIPT_DIR/answer.toml" \
-      --output "$OUTPUT_ISO"
-    echo "  ✓ Automatische ISO erstellt (answer.toml + auto-install-assistant)"
-    echo "  ℹ  First-boot Scripts müssen nach Installation manuell deployt werden."
-    echo "     Oder: manueller ISO-Bau (ohne proxmox-auto-install-assistant) für vollständige Automatisierung."
-  fi
+  proxmox-auto-install-assistant prepare-iso "$PVE_ISO" \
+    --fetch-from iso \
+    --answer-file "$SCRIPT_DIR/answer.toml" \
+    --output "$OUTPUT_ISO"
+  echo "  ✓ Automatische ISO erstellt (answer.toml + auto-install-assistant)"
+  echo "  ℹ  First-boot Scripts müssen nach Installation manuell deployt werden."
+  echo "     Oder: manueller ISO-Bau (ohne proxmox-auto-install-assistant) für vollständige Automatisierung."
 
 # ── Modus B: Manueller ISO-Bau mit squashfs-Modifikation ─────────────────
+# Wird verwendet wenn: proxmox-auto-install-assistant nicht verfügbar ODER --interactive
 else
   echo "  Extrahiere ISO-Inhalte..."
   xorriso -osirrox on -indev "$PVE_ISO" -extract / "$WORK_DIR/iso-extract" 2>/dev/null || \
