@@ -1,0 +1,44 @@
+services:
+  casaos-lxc-bridge:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "8200:8200"
+    environment:
+      - PROXMOX_HOST=${PROXMOX_HOST:-https://192.168.10.147:8006}
+      - PROXMOX_TOKEN=${PROXMOX_TOKEN}
+      - PROXMOX_NODE=${PROXMOX_NODE:-pve}
+      - PROXMOX_TEMPLATE_ID=${PROXMOX_TEMPLATE_ID:-9000}
+      - PROXMOX_STORAGE=${PROXMOX_STORAGE:-local-lvm}
+      - CASAOS_API_URL=${CASAOS_API_URL:-http://192.168.10.141/v2/apps}
+      - CASAOS_API_TOKEN=${CASAOS_API_TOKEN:-}
+      - CASAOS_CUSTOM_STORES=${CASAOS_CUSTOM_STORES:-}
+      - BRIDGE_DB_PATH=/data/apps.db
+    volumes:
+      - bridge-data:/data
+      # Proxmox pct-Zugriff: Bridge läuft auf CasaOS-LXC, pct muss via SSH zum Proxmox-Host
+      # Alternative: Proxmox-Agent auf dem Host, der pct-Befehle entgegennimmt
+    networks:
+      - openclaw-net
+
+volumes:
+  bridge-data:
+
+networks:
+  openclaw-net:
+    external: true
+
+x-casaos:
+  architectures: [amd64, arm64]
+  main: casaos-lxc-bridge
+  category: Utilities
+  description:
+    en_US: "Bridge that deploys CasaOS App Store apps as isolated Proxmox LXC containers"
+  icon: "https://cdn.jsdelivr.net/gh/IceWhaleTech/CasaOS-AppStore@main/Apps/CasaOS/icon.png"
+  tagline:
+    en_US: "CasaOS AppStore → Proxmox LXC"
+  title:
+    en_US: "CasaOS LXC Bridge"
+  port_map: "8200"
+  developer: "OpenClaw"
+  author: "OpenClaw"

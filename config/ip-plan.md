@@ -15,11 +15,14 @@
 | LXC 106 | 106 | schuetzenverein | 192.168.10.106 | Nginx + React | :3002 |
 | LXC 107 | 107 | deployment-hub | 192.168.10.107 | Node.js | :8100 |
 | LXC 108 | 108 | yubikey-auth | 192.168.10.108 | Python + USB | :8110 |
+| LXC 109 | 109 | nextcloud | 192.168.10.109 | Nextcloud 29 + MariaDB 11 | :80 |
 | LXC 200 | 200 | wine-desktop | 192.168.10.200 | Wine + VNC | :5900 :8090 |
 | LXC 201 | 201 | wine-api | 192.168.10.201 | FastAPI | :4000 |
 | LXC 202 | 202 | wine-ui | 192.168.10.202 | Nginx React | :3000 |
 | LXC 210 | 210 | usbipd | 192.168.10.210 | usbipd nativ | :3240 |
 | VM 100 | 100 | windows-obd2 | 192.168.10.220 | Windows 10 KVM | :8006 (noVNC) :3389 (RDP) |
+| LXC 300 | 300 | casaos-lxc-bridge | 192.168.10.180 | FastAPI Bridge | :8200 |
+| LXC 301–399 | 3xx | casaos-app-\* | 192.168.10.181–249 | CasaOS AppStore Apps (dynamisch) | variabel |
 
 ## Externe Geräte (nicht auf Proxmox)
 
@@ -55,9 +58,12 @@ n8n:                  http://192.168.10.104:5678
 Pionex MCP:           http://192.168.10.102:8000
 Deployment Hub:       http://192.168.10.107:8100
 YubiKey Auth:         http://192.168.10.108:8110
+Nextcloud:            http://192.168.10.109
 SV Niederklein:       http://192.168.10.105:3001
 Schützenverein:       http://192.168.10.106:3002
 Windows VM noVNC:     http://192.168.10.220:8006
 Windows VM RDP:       192.168.10.220:3389
 usbipd:               192.168.10.210:3240
+CasaOS LXC-Bridge:    http://192.168.10.180:8200
+CasaOS App-Store Apps: http://192.168.10.181–249 (dynamisch)
 ```

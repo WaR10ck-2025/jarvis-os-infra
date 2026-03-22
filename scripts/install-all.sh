@@ -47,11 +47,40 @@ else
   echo "  ✓ Template vorhanden"
 fi
 
+# ── Schritt 1b: LXC App-Template (Docker-in-LXC Basis) ───────────────────
+echo ""
+echo "► Schritt 1b: LXC App-Template (ID 9000) für CasaOS App-Store-Bridge..."
+bash "$SCRIPT_DIR/install-lxc-app-template.sh"
+
 # ── Schritt 2: Infrastruktur ───────────────────────────────────────────────
 echo ""
 echo "► Schritt 2: Infrastruktur-LXCs..."
 bash "$SCRIPT_DIR/install-lxc-reverse-proxy.sh"
 bash "$SCRIPT_DIR/install-lxc-casaos.sh"
+
+# ── Schritt 2b: Proxmox API-Token für casaos-lxc-bridge ───────────────────
+echo ""
+echo "► Schritt 2b: Proxmox API-Token für casaos-lxc-bridge..."
+pveum user add casaos@pve 2>/dev/null || true
+pveum acl modify / --users casaos@pve --roles PVEVMAdmin 2>/dev/null || true
+if ! pveum user token list casaos@pve 2>/dev/null | grep -q "casaos-bridge-token"; then
+  TOKEN_OUTPUT=$(pveum user token add casaos@pve casaos-bridge-token --privsep=0 --output-format json)
+  TOKEN_UUID=$(echo "$TOKEN_OUTPUT" | grep -o '"value":"[^"]*"' | cut -d'"' -f4)
+  echo "  ✓ Token erstellt: PVEAPIToken=casaos@pve!casaos-bridge-token=$TOKEN_UUID"
+  # Token automatisch in Bridge-.env auf LXC 20 eintragen + Bridge neu starten
+  pct exec 20 -- bash -c "
+    ENV_FILE=/opt/openclaw-proxmox/casaos-lxc-bridge/.env
+    if [ -f \"\$ENV_FILE\" ]; then
+      sed -i \"s|PROXMOX_TOKEN=.*|PROXMOX_TOKEN=PVEAPIToken=casaos@pve!casaos-bridge-token=${TOKEN_UUID}|\" \"\$ENV_FILE\"
+      docker compose -f /opt/openclaw-proxmox/casaos-lxc-bridge/docker-compose.yml restart 2>/dev/null || true
+      echo '  ✓ Token in Bridge-.env eingetragen + Bridge neu gestartet'
+    else
+      echo '  ⚠  Bridge-.env nicht gefunden — Token manuell eintragen'
+    fi
+  " 2>/dev/null || echo "  ⚠  LXC 20 nicht erreichbar — Token manuell eintragen"
+else
+  echo "  ✓ Token bereits vorhanden"
+fi
 
 # ── Schritt 3: OpenClaw Services ──────────────────────────────────────────
 echo ""
@@ -64,6 +93,7 @@ bash "$SCRIPT_DIR/install-lxc-sv-niederklein.sh"
 bash "$SCRIPT_DIR/install-lxc-schuetzenverein.sh"
 bash "$SCRIPT_DIR/install-lxc-deployment-hub.sh"
 bash "$SCRIPT_DIR/install-lxc-yubikey.sh"
+bash "$SCRIPT_DIR/install-lxc-nextcloud.sh"
 
 # ── Schritt 4: Wine Manager ───────────────────────────────────────────────
 echo ""
@@ -96,13 +126,15 @@ declare -A LXC_MAP=(
   [106]="schuetzenverein:192.168.10.106"
   [107]="deployment-hub:192.168.10.107"
   [108]="yubikey-auth:192.168.10.108"
+  [109]="nextcloud:192.168.10.109"
   [200]="wine-desktop:192.168.10.200"
   [201]="wine-api:192.168.10.201"
   [202]="wine-ui:192.168.10.202"
   [210]="usbipd:192.168.10.210"
+  [300]="casaos-lxc-bridge:192.168.10.180"
 )
 
-for ID in 10 20 101 102 103 104 105 106 107 108 200 201 202 210; do
+for ID in 10 20 101 102 103 104 105 106 107 108 109 200 201 202 210 300; do
   IFS=':' read -r HOSTNAME IP <<< "${LXC_MAP[$ID]}"
   STATUS=$(pct status "$ID" 2>/dev/null | awk '{print $2}' || echo "FEHLT")
   if [ "$STATUS" = "running" ]; then
@@ -122,6 +154,9 @@ echo "╚═══════════════════════�
 echo "  Proxmox Web-UI:       https://192.168.10.147:8006"
 echo "  Nginx Proxy Manager:  http://192.168.10.140:81  (admin/changeme)"
 echo "  CasaOS Dashboard:     http://192.168.10.141"
+echo "  Nextcloud:            http://192.168.10.109  (admin / siehe LXC .env)"
+echo "  CasaOS LXC-Bridge:   http://192.168.10.180:8200"
+echo "  Bridge App-Katalog:  http://192.168.10.180:8200/bridge/catalog"
 echo "  Wine Manager UI:      http://192.168.10.202:3000"
 echo "  n8n:                  http://192.168.10.104:5678"
 echo ""

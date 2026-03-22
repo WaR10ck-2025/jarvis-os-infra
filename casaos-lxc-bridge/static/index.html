@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>App-Store — casaos-lxc-bridge</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0f1117;
+      --surface: #1a1d27;
+      --border: #2a2d3a;
+      --accent: #4f7cff;
+      --accent-hover: #6b93ff;
+      --green: #22c55e;
+      --red: #ef4444;
+      --yellow: #f59e0b;
+      --text: #e2e8f0;
+      --muted: #64748b;
+      --radius: 12px;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 24px;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 32px;
+    }
+    header h1 { font-size: 1.4rem; font-weight: 700; letter-spacing: -0.02em; }
+    header p { color: var(--muted); font-size: 0.85rem; margin-top: 2px; }
+    .logo {
+      width: 40px; height: 40px; border-radius: 10px;
+      background: linear-gradient(135deg, var(--accent), #7c3aed);
+      display: grid; place-items: center; font-size: 1.4rem;
+    }
+
+    section { margin-bottom: 40px; }
+    .section-header {
+      display: flex; align-items: center; gap: 10px;
+      margin-bottom: 16px; padding-bottom: 10px;
+      border-bottom: 1px solid var(--border);
+    }
+    .section-header h2 { font-size: 1rem; font-weight: 600; }
+    .section-header .count {
+      background: var(--border); color: var(--muted);
+      font-size: 0.75rem; padding: 2px 8px; border-radius: 20px;
+    }
+
+    /* Search */
+    .search-wrap { position: relative; margin-bottom: 16px; }
+    .search-wrap input {
+      width: 100%; max-width: 360px;
+      background: var(--surface); border: 1px solid var(--border);
+      color: var(--text); border-radius: 8px;
+      padding: 8px 12px 8px 36px; font-size: 0.875rem; outline: none;
+    }
+    .search-wrap input:focus { border-color: var(--accent); }
+    .search-wrap::before {
+      content: "🔍"; position: absolute; left: 10px; top: 50%;
+      transform: translateY(-50%); font-size: 0.85rem;
+    }
+
+    /* App Grid */
+    .app-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 14px;
+    }
+
+    .app-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 18px 16px;
+      display: flex; flex-direction: column; gap: 10px;
+      transition: border-color 0.15s, transform 0.1s;
+    }
+    .app-card:hover { border-color: var(--accent); transform: translateY(-1px); }
+
+    .app-icon {
+      width: 48px; height: 48px; border-radius: 10px;
+      object-fit: cover; background: var(--border);
+    }
+    .app-icon-fallback {
+      width: 48px; height: 48px; border-radius: 10px;
+      background: linear-gradient(135deg, #2a2d3a, #3a3d4a);
+      display: grid; place-items: center; font-size: 1.5rem;
+      flex-shrink: 0;
+    }
+    .app-name { font-weight: 600; font-size: 0.95rem; }
+    .app-tagline { color: var(--muted); font-size: 0.78rem; line-height: 1.4; flex: 1; }
+
+    .badge {
+      display: inline-flex; align-items: center; gap: 4px;
+      font-size: 0.7rem; padding: 2px 8px; border-radius: 20px; font-weight: 500;
+    }
+    .badge.running  { background: #16a34a22; color: var(--green); }
+    .badge.stopped  { background: #f59e0b22; color: var(--yellow); }
+    .badge.error    { background: #ef444422; color: var(--red); }
+    .badge.installing { background: #4f7cff22; color: var(--accent); }
+    .badge.not_installed { background: transparent; color: var(--muted); }
+
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+      padding: 7px 14px; border-radius: 8px; border: none;
+      font-size: 0.8rem; font-weight: 600; cursor: pointer;
+      transition: background 0.15s, opacity 0.15s;
+    }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-primary:hover:not(:disabled) { background: var(--accent-hover); }
+    .btn-danger { background: #ef444422; color: var(--red); }
+    .btn-danger:hover:not(:disabled) { background: #ef444433; }
+    .btn-ghost { background: var(--border); color: var(--text); }
+    .btn-ghost:hover:not(:disabled) { background: #3a3d4a; }
+
+    .card-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+
+    /* Installed list */
+    .installed-list { display: flex; flex-direction: column; gap: 10px; }
+    .installed-row {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 14px 16px;
+      display: flex; align-items: center; gap: 14px;
+    }
+    .installed-row .app-icon, .installed-row .app-icon-fallback { width: 36px; height: 36px; }
+    .installed-info { flex: 1; }
+    .installed-info .name { font-weight: 600; font-size: 0.9rem; }
+    .installed-info .url  { color: var(--muted); font-size: 0.78rem; margin-top: 2px; }
+    .installed-actions { display: flex; gap: 6px; }
+
+    /* Spinner */
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spinner {
+      display: inline-block; width: 12px; height: 12px;
+      border: 2px solid currentColor; border-top-color: transparent;
+      border-radius: 50%; animation: spin 0.6s linear infinite;
+    }
+
+    .toast {
+      position: fixed; bottom: 24px; right: 24px;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 10px; padding: 12px 18px;
+      font-size: 0.85rem; max-width: 320px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+      animation: slideIn 0.2s ease;
+      z-index: 999;
+    }
+    @keyframes slideIn { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:none; } }
+    .toast.error { border-color: var(--red); }
+    .toast.success { border-color: var(--green); }
+
+    .empty { color: var(--muted); font-size: 0.85rem; padding: 12px 0; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">🌉</div>
+  <div>
+    <h1>App-Store</h1>
+    <p>casaos-lxc-bridge — Apps als isolierte Proxmox-LXC-Container</p>
+  </div>
+</header>
+
+<!-- ── Freigeschaltete Apps ─────────────────────────────────── -->
+<section>
+  <div class="section-header">
+    <span>⭐</span>
+    <h2>Freigeschaltete Apps</h2>
+    <span class="count" id="preconfigured-count">…</span>
+  </div>
+  <div class="app-grid" id="preconfigured-grid">
+    <div class="empty">Lade…</div>
+  </div>
+</section>
+
+<!-- ── Installierte Apps ───────────────────────────────────── -->
+<section>
+  <div class="section-header">
+    <span>✓</span>
+    <h2>Installierte Apps</h2>
+    <span class="count" id="installed-count">0</span>
+  </div>
+  <div class="installed-list" id="installed-list">
+    <div class="empty">Noch keine Apps installiert.</div>
+  </div>
+</section>
+
+<!-- ── App-Store Katalog ───────────────────────────────────── -->
+<section>
+  <div class="section-header">
+    <span>📦</span>
+    <h2>App-Store Katalog</h2>
+    <span class="count" id="catalog-count">…</span>
+  </div>
+  <div class="search-wrap">
+    <input type="text" id="catalog-search" placeholder="App suchen…" oninput="filterCatalog()">
+  </div>
+  <div class="app-grid" id="catalog-grid">
+    <div class="empty">Lade Katalog…</div>
+  </div>
+</section>
+
+<script>
+const API = '';
+let installedApps = {};
+let catalogApps = [];
+let pollingTimers = {};
+
+// ── Helpers ────────────────────────────────────────────────
+function toast(msg, type = 'info') {
+  const el = document.createElement('div');
+  el.className = `toast ${type}`;
+  el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 4000);
+}
+
+function statusBadge(status) {
+  const labels = {
+    running: '● Läuft', stopped: '○ Gestoppt',
+    installing: '⟳ Installiert…', error: '✗ Fehler', not_installed: ''
+  };
+  return `<span class="badge ${status}">${labels[status] || status}</span>`;
+}
+
+function iconEl(icon, name) {
+  if (icon) {
+    return `<img class="app-icon" src="${icon}" alt="${name}"
+              onerror="this.outerHTML='<div class=\\'app-icon-fallback\\'>📦</div>'" loading="lazy">`;
+  }
+  return `<div class="app-icon-fallback">📦</div>`;
+}
+
+// ── Install / Remove ────────────────────────────────────────
+async function installApp(appId, btn) {
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Installiert…';
+  try {
+    const r = await fetch(`${API}/bridge/install?appid=${encodeURIComponent(appId)}`, { method: 'POST' });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.detail || 'Fehler');
+    toast(`${appId} wird installiert (LXC ${data.lxc_id})…`, 'success');
+    pollStatus(appId);
+    await loadInstalled();
+    await loadPreconfigured();
+  } catch (e) {
+    toast(`Fehler: ${e.message}`, 'error');
+    btn.disabled = false;
+    btn.innerHTML = 'Installieren';
+  }
+}
+
+async function removeApp(appId) {
+  if (!confirm(`${appId} wirklich entfernen? Der LXC-Container wird gelöscht.`)) return;
+  try {
+    const r = await fetch(`${API}/bridge/remove?appid=${encodeURIComponent(appId)}`, { method: 'DELETE' });
+    if (!r.ok) { const d = await r.json(); throw new Error(d.detail); }
+    toast(`${appId} entfernt.`, 'success');
+    await loadInstalled();
+    await loadPreconfigured();
+  } catch (e) {
+    toast(`Fehler: ${e.message}`, 'error');
+  }
+}
+
+// ── Status-Polling ──────────────────────────────────────────
+function pollStatus(appId) {
+  if (pollingTimers[appId]) return;
+  pollingTimers[appId] = setInterval(async () => {
+    try {
+      const r = await fetch(`${API}/bridge/status?appid=${encodeURIComponent(appId)}`);
+      if (!r.ok) return;
+      const d = await r.json();
+      if (d.status === 'running' || d.status === 'error') {
+        clearInterval(pollingTimers[appId]);
+        delete pollingTimers[appId];
+        await loadInstalled();
+        await loadPreconfigured();
+        if (d.status === 'running') toast(`${appId} ist bereit!`, 'success');
+        else toast(`${appId}: Installationsfehler`, 'error');
+      }
+    } catch {}
+  }, 3000);
+}
+
+// ── Freigeschaltete Apps laden ──────────────────────────────
+async function loadPreconfigured() {
+  try {
+    const r = await fetch(`${API}/bridge/preconfigured`);
+    const data = await r.json();
+    const apps = data.apps || [];
+    document.getElementById('preconfigured-count').textContent = apps.length;
+    const grid = document.getElementById('preconfigured-grid');
+    if (!apps.length) { grid.innerHTML = '<div class="empty">Keine Apps konfiguriert.</div>'; return; }
+
+    grid.innerHTML = apps.map(app => {
+      const installed = app.status !== 'not_installed';
+      const url = app.url || (app.ip ? `http://${app.ip}:${app.port}` : null);
+      return `
+        <div class="app-card" id="card-pre-${app.app_id}">
+          ${iconEl(app.icon, app.name)}
+          <div>
+            <div class="app-name">${app.name}</div>
+            <div class="app-tagline">${app.tagline || ''}</div>
+          </div>
+          ${app.status !== 'not_installed' ? statusBadge(app.status) : ''}
+          <div class="card-actions">
+            ${!installed
+              ? `<button class="btn btn-primary" onclick="installApp('${app.app_id}', this)">Installieren</button>`
+              : `${url ? `<a class="btn btn-ghost" href="${url}" target="_blank">Öffnen</a>` : ''}
+                 <button class="btn btn-danger" onclick="removeApp('${app.app_id}')">Entfernen</button>`
+            }
+          </div>
+        </div>`;
+    }).join('');
+
+    // Polling für laufende Installationen fortsetzen
+    apps.filter(a => a.status === 'installing').forEach(a => pollStatus(a.app_id));
+  } catch (e) {
+    document.getElementById('preconfigured-grid').innerHTML = '<div class="empty">Fehler beim Laden.</div>';
+  }
+}
+
+// ── Installierte Apps laden ─────────────────────────────────
+async function loadInstalled() {
+  try {
+    const r = await fetch(`${API}/bridge/list`);
+    const data = await r.json();
+    const apps = data.apps || [];
+    installedApps = Object.fromEntries(apps.map(a => [a.app_id, a]));
+    document.getElementById('installed-count').textContent = apps.length;
+    const list = document.getElementById('installed-list');
+    if (!apps.length) { list.innerHTML = '<div class="empty">Noch keine Apps installiert.</div>'; return; }
+
+    list.innerHTML = apps.map(app => `
+      <div class="installed-row">
+        <div class="app-icon-fallback" style="font-size:1rem">📦</div>
+        <div class="installed-info">
+          <div class="name">${app.app_id}</div>
+          <div class="url">${app.url} · LXC ${app.lxc_id}</div>
+        </div>
+        ${statusBadge(app.status)}
+        <div class="installed-actions">
+          <a class="btn btn-ghost" href="${app.url}" target="_blank">Öffnen</a>
+          <button class="btn btn-danger" onclick="removeApp('${app.app_id}')">✕</button>
+        </div>
+      </div>`).join('');
+  } catch {}
+}
+
+// ── Katalog laden ────────────────────────────────────────────
+async function loadCatalog() {
+  try {
+    const r = await fetch(`${API}/bridge/catalog`);
+    const data = await r.json();
+    catalogApps = (data.apps || []).sort();
+    document.getElementById('catalog-count').textContent = catalogApps.length;
+    renderCatalog(catalogApps);
+  } catch {
+    document.getElementById('catalog-grid').innerHTML = '<div class="empty">Katalog nicht verfügbar (NextDNS?).</div>';
+  }
+}
+
+function renderCatalog(apps) {
+  const grid = document.getElementById('catalog-grid');
+  if (!apps.length) { grid.innerHTML = '<div class="empty">Keine Ergebnisse.</div>'; return; }
+  grid.innerHTML = apps.slice(0, 60).map(appId => {
+    const isInstalled = !!installedApps[appId];
+    return `
+      <div class="app-card">
+        <div class="app-icon-fallback">📦</div>
+        <div>
+          <div class="app-name">${appId}</div>
+          <div class="app-tagline">CasaOS App Store</div>
+        </div>
+        ${isInstalled ? statusBadge(installedApps[appId].status) : ''}
+        <div class="card-actions">
+          ${!isInstalled
+            ? `<button class="btn btn-primary" onclick="installApp('${appId}', this)">Installieren</button>`
+            : `<a class="btn btn-ghost" href="${installedApps[appId].url}" target="_blank">Öffnen</a>
+               <button class="btn btn-danger" onclick="removeApp('${appId}')">✕</button>`
+          }
+        </div>
+      </div>`;
+  }).join('');
+  if (apps.length > 60) {
+    grid.innerHTML += `<div class="empty" style="grid-column:1/-1">… und ${apps.length - 60} weitere. Suche verfeinern.</div>`;
+  }
+}
+
+function filterCatalog() {
+  const q = document.getElementById('catalog-search').value.toLowerCase();
+  renderCatalog(q ? catalogApps.filter(a => a.toLowerCase().includes(q)) : catalogApps);
+}
+
+// ── Init ────────────────────────────────────────────────────
+(async () => {
+  await loadInstalled();
+  await loadPreconfigured();
+  loadCatalog();  // nicht awaiten — lädt langsam via GitHub API
+})();
+</script>
+</body>
+</html>
