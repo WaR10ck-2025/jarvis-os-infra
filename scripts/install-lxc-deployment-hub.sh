@@ -13,8 +13,12 @@ DISK=8
 CORES=1
 TEMPLATE="local:vztmpl/debian-12-standard_12.12-1_amd64.tar.zst"
 STORAGE="local-lvm"
-REPO_URL="https://github.com/WaR10ck-2025/GitHub-Deployment-Connector.git"
+REPO_URL="git@github.com:WaR10ck-2025/GitHub-Deployment-Connector.git"
 DEPLOY_DIR="/root/docker/deployment-hub"
+
+# Deploy Key (read-only, für dieses Repo generiert)
+# Public Key hinterlegt unter: GitHub → Repo → Settings → Deploy Keys
+DEPLOY_KEY_B64="LS0tLS1CRUdJTiBPUEVOU1NIIFBSSVZBVEUgS0VZLS0tLS0KYjNCbGJuTnphQzFyWlhrdGRqRUFBQUFBQkc1dmJtVUFBQUFFYm05dVpRQUFBQUFBQUFBQkFBQUFNd0FBQUF0emMyZ3RaVwpReU5UVXhPUUFBQUNCekNpYkMxVmxRS3ViT3c2cnBHS2FpRGNGTGZVNTBJOGFmdE8yMmZCRytsZ0FBQUpockFpNDJhd0l1Ck5nQUFBQXR6YzJndFpXUXlOVFV4T1FBQUFDQnpDaWJDMVZsUUt1Yk93NnJwR0thaURjRkxmVTUwSThhZnRPMjJmQkcrbGcKQUFBRURQWGd2MDRCRkU5ejBINVB2UmJyVlpEWS8yMUFudE13M1YwOHZLMTZDY2duTUtKc0xWV1ZBcTVzN0RxdWtZcHFJTgp3VXQ5VG5RanhwKzA3Ylo4RWI2V0FBQUFFMjl3Wlc1amJHRjNMV1pwY25OMExXSnZiM1FCQWc9PQotLS0tLUVORCBPUEVOU1NIIFBSSVZBVEUgS0VZLS0tLS0K"
 
 echo "► LXC $LXC_ID ($HOSTNAME) — $LXC_IP..."
 
@@ -40,12 +44,22 @@ pct exec "$LXC_ID" -- bash -c "
 set -e
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
-apt-get install -y -qq curl ca-certificates git
+apt-get install -y -qq curl ca-certificates git openssh-client
 
 # Docker CE via get.docker.com (inkl. compose plugin)
 curl -fsSL https://get.docker.com | sh -s -- --quiet 2>/dev/null
 systemctl enable docker --quiet
 systemctl start docker
+
+# Deploy Key einrichten (SSH-Authentifizierung für privates Repo)
+mkdir -p /root/.ssh && chmod 700 /root/.ssh
+echo '${DEPLOY_KEY_B64}' | base64 -d > /root/.ssh/openclaw-deploy-key
+chmod 600 /root/.ssh/openclaw-deploy-key
+cat >> /root/.ssh/config << 'SSHCONF'
+Host github.com
+  IdentityFile /root/.ssh/openclaw-deploy-key
+  StrictHostKeyChecking no
+SSHCONF
 
 if [ -d '$DEPLOY_DIR/.git' ]; then
   cd '$DEPLOY_DIR' && git pull --quiet
