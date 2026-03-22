@@ -76,8 +76,10 @@ volumes:
 EOF
 
 cd /opt/nginx-proxy-manager
-docker compose pull --quiet 2>/dev/null || docker-compose pull --quiet 2>/dev/null || true
-docker compose up -d || docker-compose up -d
+# Alte Container stoppen (idempotent)
+docker compose down --remove-orphans 2>/dev/null || true
+docker compose pull --quiet 2>/dev/null || true
+docker compose up -d
 echo 'Nginx Proxy Manager gestartet'
 SETUP
 pct push "$LXC_ID" /tmp/lxc-${LXC_ID}-setup.sh /tmp/setup.sh

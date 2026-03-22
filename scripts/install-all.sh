@@ -78,8 +78,8 @@ bash "$SCRIPT_DIR/install-lxc-app-template.sh"
 # ── Schritt 2: Infrastruktur ───────────────────────────────────────────────
 echo ""
 echo "► Schritt 2: Infrastruktur-LXCs..."
-bash "$SCRIPT_DIR/install-lxc-reverse-proxy.sh"
-bash "$SCRIPT_DIR/install-lxc-casaos.sh"
+bash "$SCRIPT_DIR/install-lxc-reverse-proxy.sh" || echo "  ⚠  Reverse-Proxy: Fehler (ggf. bereits installiert)"
+bash "$SCRIPT_DIR/install-lxc-casaos.sh" || echo "  ⚠  CasaOS: Fehler (ggf. bereits installiert)"
 
 # ── Schritt 2b: Proxmox API-Token für casaos-lxc-bridge ───────────────────
 echo ""
@@ -108,27 +108,27 @@ fi
 # ── Schritt 3: OpenClaw Services ──────────────────────────────────────────
 echo ""
 echo "► Schritt 3: OpenClaw Service-LXCs..."
-bash "$SCRIPT_DIR/install-lxc-setup-repair.sh"
-bash "$SCRIPT_DIR/install-lxc-pionex.sh"
-bash "$SCRIPT_DIR/install-lxc-voice.sh"
-bash "$SCRIPT_DIR/install-lxc-n8n.sh"
-bash "$SCRIPT_DIR/install-lxc-sv-niederklein.sh"
-bash "$SCRIPT_DIR/install-lxc-schuetzenverein.sh"
-bash "$SCRIPT_DIR/install-lxc-deployment-hub.sh"
-bash "$SCRIPT_DIR/install-lxc-yubikey.sh"
-bash "$SCRIPT_DIR/install-lxc-nextcloud.sh"
+bash "$SCRIPT_DIR/install-lxc-setup-repair.sh"  || echo "  ⚠  setup-repair: Fehler"
+bash "$SCRIPT_DIR/install-lxc-pionex.sh"         || echo "  ⚠  pionex: Fehler"
+bash "$SCRIPT_DIR/install-lxc-voice.sh"          || echo "  ⚠  voice: Fehler"
+bash "$SCRIPT_DIR/install-lxc-n8n.sh"            || echo "  ⚠  n8n: Fehler"
+bash "$SCRIPT_DIR/install-lxc-sv-niederklein.sh" || echo "  ⚠  sv-niederklein: Fehler"
+bash "$SCRIPT_DIR/install-lxc-schuetzenverein.sh"|| echo "  ⚠  schuetzenverein: Fehler"
+bash "$SCRIPT_DIR/install-lxc-deployment-hub.sh" || echo "  ⚠  deployment-hub: Fehler"
+bash "$SCRIPT_DIR/install-lxc-yubikey.sh"        || echo "  ⚠  yubikey: Fehler"
+bash "$SCRIPT_DIR/install-lxc-nextcloud.sh"      || echo "  ⚠  nextcloud: Fehler"
 
 # ── Schritt 4: Wine Manager ───────────────────────────────────────────────
 echo ""
 echo "► Schritt 4: Wine Manager LXCs..."
-bash "$SCRIPT_DIR/install-lxc-wine-desktop.sh"
-bash "$SCRIPT_DIR/install-lxc-wine-api.sh"
-bash "$SCRIPT_DIR/install-lxc-wine-ui.sh"
+bash "$SCRIPT_DIR/install-lxc-wine-desktop.sh" || echo "  ⚠  wine-desktop: Fehler"
+bash "$SCRIPT_DIR/install-lxc-wine-api.sh"     || echo "  ⚠  wine-api: Fehler"
+bash "$SCRIPT_DIR/install-lxc-wine-ui.sh"      || echo "  ⚠  wine-ui: Fehler"
 
 # ── Schritt 5: usbipd ─────────────────────────────────────────────────────
 echo ""
 echo "► Schritt 5: usbipd LXC..."
-bash "$SCRIPT_DIR/install-lxc-usbipd.sh"
+bash "$SCRIPT_DIR/install-lxc-usbipd.sh" || echo "  ⚠  usbipd: Fehler"
 
 # ── Schritt 6: Status-Übersicht ───────────────────────────────────────────
 echo ""
