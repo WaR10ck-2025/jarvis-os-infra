@@ -1,0 +1,59 @@
+#!/bin/bash
+# install-lxc-setup-repair.sh — LXC 101: Setup-Repair-Agent
+# IP: 192.168.10.101 | Port: :8007
+# Repo: https://github.com/WaR10ck-2025/Setup-Repair-Agent
+
+set -e
+
+LXC_ID=101
+LXC_IP="192.168.10.101"
+HOSTNAME="setup-repair-agent"
+RAM=256
+DISK=4
+CORES=1
+TEMPLATE="local:vztmpl/debian-12-standard_12.7-1_amd64.tar.zst"
+STORAGE="local-lvm"
+REPO_URL="https://github.com/WaR10ck-2025/Setup-Repair-Agent.git"
+DEPLOY_DIR="/root/docker/setup-repair"
+
+echo "► LXC $LXC_ID ($HOSTNAME) — $LXC_IP..."
+
+if ! pct status "$LXC_ID" &>/dev/null; then
+  pct create "$LXC_ID" "$TEMPLATE" \
+    --hostname "$HOSTNAME" \
+    --memory "$RAM" \
+    --cores "$CORES" \
+    --rootfs "$STORAGE:$DISK" \
+    --net0 "name=eth0,bridge=vmbr0,ip=${LXC_IP}/24,gw=192.168.10.1" \
+    --nameserver "192.168.10.1" \
+    --features "nesting=1" \
+    --unprivileged 1 \
+    --start 0
+fi
+
+if ! pct status "$LXC_ID" | grep -q "running"; then
+  pct start "$LXC_ID"
+  sleep 5
+fi
+
+pct exec "$LXC_ID" -- bash -c "
+set -e
+export DEBIAN_FRONTEND=noninteractive
+apt-get update -qq
+apt-get install -y -qq docker.io docker-compose-plugin git curl
+
+systemctl enable docker --quiet
+systemctl start docker
+
+# Repo klonen oder aktualisieren
+if [ -d '$DEPLOY_DIR/.git' ]; then
+  cd '$DEPLOY_DIR' && git pull --quiet
+else
+  git clone '$REPO_URL' '$DEPLOY_DIR' --quiet
+fi
+
+# install.sh ausführen (idempotent)
+bash '$DEPLOY_DIR/scripts/server/install.sh'
+"
+
+echo "  ✓ LXC $LXC_ID ($HOSTNAME): http://${LXC_IP}:8007"

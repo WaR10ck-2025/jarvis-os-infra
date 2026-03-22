@@ -1,0 +1,47 @@
+# /etc/systemd/system/openclaw-first-boot.service
+#
+# OpenClaw First-Boot Setup Service
+# Läuft einmalig nach erstem Proxmox-Boot und deployt die Basis-Plattform.
+#
+# Installation (wird von build-iso.sh automatisch injiziert):
+#   cp first-boot.service /etc/systemd/system/openclaw-first-boot.service
+#   cp first-boot.sh /root/openclaw-first-boot.sh
+#   chmod +x /root/openclaw-first-boot.sh
+#   systemctl enable openclaw-first-boot.service
+#
+# Logs verfolgen:
+#   journalctl -u openclaw-first-boot -f
+#   cat /var/log/openclaw-first-boot.log
+
+[Unit]
+Description=OpenClaw First-Boot Setup (Nginx Proxy + CasaOS + Deployment Hub)
+Documentation=https://github.com/WaR10ck-2025/wine-docker-manager
+
+# Nach Netzwerk und Proxmox-Cluster warten
+After=network-online.target pve-cluster.service pve-storage.target
+Wants=network-online.target
+
+# LUKS muss entsperrt sein (pve-storage.target erfordert das bereits)
+Requires=pve-storage.target
+
+# Nur einmal ausführen — wenn Done-Flag existiert, überspringen
+ConditionPathExists=!/etc/openclaw-setup.done
+
+[Service]
+Type=oneshot
+ExecStart=/root/openclaw-first-boot.sh
+StandardOutput=journal+console
+StandardError=journal+console
+SyslogIdentifier=openclaw-first-boot
+
+# Timeout: 30 Minuten (Docker Image Downloads können dauern)
+TimeoutStartSec=1800
+
+# Bei Fehler: nicht automatisch neu starten (manuell debuggen)
+Restart=no
+
+# Logging auch in Datei
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

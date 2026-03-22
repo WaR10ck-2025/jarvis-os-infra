@@ -1,0 +1,43 @@
+# /etc/systemd/system/zfs-unlock.service
+#
+# ZFS verschlüsselte Pools beim Boot entsperren.
+# Läuft nach LUKS-Unlock, vor PVE Storage-Initialisierung.
+#
+# Aktivierung (von first-boot.sh automatisch durchgeführt):
+#   cp zfs-unlock.sh /usr/local/bin/
+#   chmod +x /usr/local/bin/zfs-unlock.sh
+#   cp zfs-unlock.service /etc/systemd/system/
+#   systemctl daemon-reload
+#   systemctl enable zfs-unlock.service
+#
+# Wenn keine ZFS Pools vorhanden: Service startet und beendet sich sofort (kein Fehler)
+# Wenn ZFS Pools vorhanden: interaktiver Passphrase-Prompt oder YubiKey HMAC
+
+[Unit]
+Description=ZFS Encrypted Pool Unlock (Passphrase oder YubiKey HMAC)
+Documentation=https://github.com/WaR10ck-2025/wine-docker-manager
+
+# Nach LUKS-Unlock und lokalen Dateisystemen
+After=cryptsetup.target local-fs.target zfs-import.target
+Before=pve-storage.target
+
+# Nicht fehlschlagen wenn ZFS nicht installiert
+ConditionPathExists=/usr/sbin/zpool
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/zfs-unlock.sh
+StandardInput=tty-force
+StandardOutput=journal+console
+StandardError=journal+console
+SyslogIdentifier=zfs-unlock
+
+# Timeout: 5 Minuten für manuelle Passphrase-Eingabe pro Pool
+TimeoutStartSec=300
+
+# Bei Fehler: System bootet trotzdem weiter (Pools bleiben encrypted)
+# Guests die ZFS-Storage benötigen, starten dann nicht
+RemainAfterExit=yes
+
+[Install]
+WantedBy=pve-storage.target

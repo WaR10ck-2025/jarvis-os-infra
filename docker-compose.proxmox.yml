@@ -1,0 +1,45 @@
+# docker-compose.proxmox.yml — Proxmox Override
+#
+# Überschreibt die Haupt-docker-compose.yml für den Proxmox-Betrieb:
+#   - usbip-server: deaktiviert (läuft nativ in LXC 210)
+#   - windows-vm:   deaktiviert (läuft als native KVM VM 100)
+#
+# Verwendung (innerhalb LXC 200/201/202):
+#   docker compose -f docker-compose.yml -f docker-compose.proxmox.yml up -d
+#
+# Oder per Umgebungsvariable:
+#   COMPOSE_FILE=docker-compose.yml:docker-compose.proxmox.yml docker compose up -d
+
+version: '3.8'
+
+services:
+
+  # ── Wine Desktop ────────────────────────────────────────────────────────────
+  # Läuft in LXC 200 — Netzwerk-Modus bleibt bridge, kein host-network nötig
+  wine-desktop:
+    environment:
+      # Überschreibe USBIP-Konfiguration: usbipd läuft in LXC 210 (extern)
+      USBIP_SERVER_HOST: "192.168.10.210"
+
+  # ── Manager Backend ─────────────────────────────────────────────────────────
+  # Läuft in LXC 201 — alle IPs direkt, kein Docker-Container-Name routing
+  manager-api:
+    environment:
+      # Wine-Desktop ist in LXC 200, nicht per Container-Name erreichbar
+      WINE_CONTAINER_HOST: "192.168.10.200"
+      # usbipd läuft nativ in LXC 210 (nicht als Docker-Container)
+      USBIP_REMOTE_HOST: "192.168.10.210"
+
+  # ── USB/IP Server ───────────────────────────────────────────────────────────
+  # Deaktiviert: Läuft nativ (ohne Docker) in LXC 210
+  # native systemd-Service: /etc/systemd/system/usbipd.service
+  usbip-server:
+    profiles:
+      - disabled   # Nie starten — kein Profil "usbip" mehr verwenden
+
+  # ── Windows VM ─────────────────────────────────────────────────────────────
+  # Deaktiviert: Läuft als native KVM VM 100 auf Proxmox
+  # Vorteile: native KVM-Beschleunigung, direktes USB-Passthrough (1 Layer)
+  windows-vm:
+    profiles:
+      - disabled   # Nie starten — kein Profil "windows-vm" mehr verwenden

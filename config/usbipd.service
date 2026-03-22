@@ -1,0 +1,54 @@
+# /etc/systemd/system/usbipd.service
+#
+# systemd-Unit für USB/IP Server in LXC 210 (usbipd — 192.168.10.210)
+#
+# Installation:
+#   cp usbipd.service /etc/systemd/system/
+#   systemctl daemon-reload
+#   systemctl enable --now usbipd
+#
+# Voraussetzungen in LXC 210:
+#   - privileged: true (in Proxmox LXC-Konfiguration gesetzt)
+#   - /dev/bus/usb bind-mount aus Proxmox Host
+#   - usbip-utils installiert: apt install -y usbip hwdata
+#   - Kernel-Module im LXC geladen: modprobe usbip_core usbip_host
+#
+# USB-Gerät: Autocom CDP+ (FTDI 0403:d6da)
+# Bus-ID:    Muss vor Start per `usbip list -l` geprüft werden
+
+[Unit]
+Description=USB/IP Server — Autocom CDP+ (FTDI 0403:d6da)
+After=network.target
+Documentation=https://github.com/torvalds/linux/tree/master/tools/usb/usbip
+
+[Service]
+Type=forking
+User=root
+
+# Kernel-Module laden
+ExecStartPre=/sbin/modprobe usbip_core
+ExecStartPre=/sbin/modprobe usbip_host
+
+# usbipd im Hintergrund starten (lauscht auf Port 3240)
+ExecStart=/usr/sbin/usbipd --daemon
+
+# Autocom CDP+ binden — Bus-ID via lsusb + usbip list -l ermitteln
+# Standardmäßig Bus-ID 3-6; bei Änderung anpassen:
+ExecStartPost=/bin/bash -c "sleep 1 && \
+  BUSID=$(usbip list -l 2>/dev/null | grep '0403:d6da' | awk '{print $1}' | tr -d ':') && \
+  [ -n \"$BUSID\" ] && usbip bind --busid=\"$BUSID\" || \
+  echo 'WARNUNG: Autocom CDP+ (0403:d6da) nicht gefunden — Gerät eingesteckt?'"
+
+ExecStop=/usr/sbin/usbipd --exit-grace-period 5
+ExecStopPost=/sbin/modprobe -r usbip_host
+
+Restart=on-failure
+RestartSec=10s
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=usbipd
+
+[Install]
+WantedBy=multi-user.target

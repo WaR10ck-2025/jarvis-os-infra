@@ -1,0 +1,246 @@
+#!/bin/bash
+# build-iso.sh — Custom Proxmox ISO mit OpenClaw Autoinstall erstellen
+#
+# Erstellt ein bootfähiges USB-Image / ISO das:
+#   1. Proxmox VE automatisch installiert (kein manueller Input)
+#   2. LUKS2 Verschlüsselung der System-Disk einrichtet
+#   3. Beim ersten Boot: Nginx Proxy Manager, CasaOS + Deployment Hub deployt
+#
+# Voraussetzungen (Linux/WSL2):
+#   apt install xorriso squashfs-tools p7zip-full syslinux-utils curl git
+#   Optional: apt install proxmox-auto-install-assistant (auf Debian/Proxmox)
+#
+# Verwendung:
+#   bash build-iso.sh                                   # alles automatisch
+#   bash build-iso.sh --pve-iso /path/to/proxmox-ve.iso # eigene ISO nutzen
+#   bash build-iso.sh --output /dev/sdb                 # direkt auf USB schreiben
+#
+# Output:
+#   proxmox-openclaw.iso — fertiges ISO (ca. 1 GB)
+#
+# USB erstellen (nach build):
+#   dd if=proxmox-openclaw.iso of=/dev/sdX bs=4M status=progress
+
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+WORK_DIR="/tmp/proxmox-openclaw-build"
+OUTPUT_ISO="$SCRIPT_DIR/proxmox-openclaw.iso"
+PVE_ISO=""
+WRITE_TO_USB=""
+
+# Parameter parsen
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --pve-iso) PVE_ISO="$2"; shift 2 ;;
+    --output)  WRITE_TO_USB="$2"; shift 2 ;;
+    --help|-h)
+      echo "Verwendung: $0 [--pve-iso /path/to.iso] [--output /dev/sdX]"
+      exit 0 ;;
+    *) echo "Unbekannter Parameter: $1"; exit 1 ;;
+  esac
+done
+
+echo "╔══════════════════════════════════════════════════════════╗"
+echo "║       OpenClaw OS — Custom Proxmox ISO Builder         ║"
+echo "╚══════════════════════════════════════════════════════════╝"
+echo ""
+
+# Root-Check
+[ "$(id -u)" -ne 0 ] && { echo "✗ Root erforderlich (für ISO-Modifikation)."; exit 1; }
+
+# ── Abhängigkeiten prüfen ─────────────────────────────────────────────────
+echo "► Abhängigkeiten prüfen..."
+MISSING=()
+for CMD in xorriso unsquashfs mksquashfs 7z curl git isohybrid; do
+  command -v "$CMD" &>/dev/null || MISSING+=("$CMD")
+done
+
+if [ ${#MISSING[@]} -gt 0 ]; then
+  echo "  Fehlende Tools: ${MISSING[*]}"
+  echo "  Installiere..."
+  apt-get update -qq
+  apt-get install -y -qq xorriso squashfs-tools p7zip-full syslinux-utils curl git 2>/dev/null || true
+fi
+
+# proxmox-auto-install-assistant verfügbar?
+USE_PVE_ASSISTANT=false
+if command -v proxmox-auto-install-assistant &>/dev/null; then
+  USE_PVE_ASSISTANT=true
+  echo "  ✓ proxmox-auto-install-assistant verfügbar (bevorzugter Modus)"
+else
+  echo "  ℹ  proxmox-auto-install-assistant nicht verfügbar → manueller ISO-Bau"
+fi
+
+# ── Proxmox VE ISO beschaffen ─────────────────────────────────────────────
+echo ""
+echo "► Proxmox VE ISO..."
+
+PVE_VERSION="8.4"  # Aktuellste stabile Version
+PVE_ISO_NAME="proxmox-ve_${PVE_VERSION}-1.iso"
+PVE_ISO_URL="https://enterprise.proxmox.com/iso/${PVE_ISO_NAME}"
+
+if [ -z "$PVE_ISO" ]; then
+  # Nach lokaler ISO suchen
+  for SEARCH_PATH in "$SCRIPT_DIR" "$SCRIPT_DIR/.." /tmp ~/Downloads; do
+    FOUND=$(find "$SEARCH_PATH" -maxdepth 1 -name "proxmox-ve_*.iso" 2>/dev/null | head -1)
+    [ -n "$FOUND" ] && PVE_ISO="$FOUND" && break
+  done
+fi
+
+if [ -n "$PVE_ISO" ] && [ -f "$PVE_ISO" ]; then
+  echo "  ✓ Verwende: $PVE_ISO"
+else
+  echo "  Proxmox VE ISO nicht gefunden."
+  echo "  Bitte herunterladen von: https://www.proxmox.com/proxmox-virtual-environment/get-started"
+  echo ""
+  read -rp "  ISO-Pfad manuell eingeben (oder Enter zum Abbrechen): " MANUAL_ISO
+  if [ -n "$MANUAL_ISO" ] && [ -f "$MANUAL_ISO" ]; then
+    PVE_ISO="$MANUAL_ISO"
+  else
+    echo ""
+    echo "  Alternativ: ISO direkt herunterladen (wget):"
+    echo "  wget -O proxmox-ve.iso '${PVE_ISO_URL}'"
+    echo ""
+    echo "  ✗ Kein ISO gefunden — abbruch."
+    exit 1
+  fi
+fi
+
+# ── Arbeitsverzeichnis vorbereiten ────────────────────────────────────────
+echo ""
+echo "► ISO vorbereiten..."
+rm -rf "$WORK_DIR"
+mkdir -p "$WORK_DIR"/{iso-extract,squashfs-extract,iso-new}
+
+# ── Modus A: proxmox-auto-install-assistant ───────────────────────────────
+if $USE_PVE_ASSISTANT; then
+  echo "  Verwende proxmox-auto-install-assistant..."
+
+  # answer.toml + first-boot Scripts in ein Verzeichnis kopieren
+  mkdir -p "$WORK_DIR/inject"
+  cp "$SCRIPT_DIR/answer.toml" "$WORK_DIR/inject/"
+
+  # First-boot Scripts (werden nach Installation in /root/ platziert)
+  cp "$SCRIPT_DIR/first-boot.sh" "$WORK_DIR/inject/openclaw-first-boot.sh"
+  cp "$SCRIPT_DIR/first-boot.service" "$WORK_DIR/inject/openclaw-first-boot.service"
+  cp "$SCRIPT_DIR/yubikey-enroll.sh" "$WORK_DIR/inject/" 2>/dev/null || true
+  cp "$SCRIPT_DIR/zfs-unlock.sh" "$WORK_DIR/inject/" 2>/dev/null || true
+  cp "$SCRIPT_DIR/zfs-unlock.service" "$WORK_DIR/inject/" 2>/dev/null || true
+  cp "$SCRIPT_DIR/zfs-pool-create.sh" "$WORK_DIR/inject/" 2>/dev/null || true
+
+  proxmox-auto-install-assistant prepare-iso "$PVE_ISO" \
+    --answer-file "$WORK_DIR/inject/answer.toml" \
+    --output "$OUTPUT_ISO"
+
+  echo "  ✓ ISO mit answer.toml erstellt (auto-install-assistant)"
+  echo "  ℹ  First-boot Scripts müssen nach Installation manuell deployt werden."
+  echo "     Oder: manueller ISO-Bau für vollständige Automatisierung."
+
+# ── Modus B: Manueller ISO-Bau mit squashfs-Modifikation ─────────────────
+else
+  echo "  Extrahiere ISO..."
+  7z x -o"$WORK_DIR/iso-extract" "$PVE_ISO" -y -bsp0 -bso0 2>/dev/null || \
+  xorriso -osirrox on -indev "$PVE_ISO" -extract / "$WORK_DIR/iso-extract"
+
+  # squashfs Installer-Dateisystem extrahieren
+  SQUASH_FILE=$(find "$WORK_DIR/iso-extract" -name "*.squashfs" | head -1)
+  if [ -z "$SQUASH_FILE" ]; then
+    echo "✗ squashfs nicht gefunden — ISO-Format unbekannt"
+    exit 1
+  fi
+
+  echo "  squashfs extrahieren: $SQUASH_FILE"
+  unsquashfs -d "$WORK_DIR/squashfs-extract" "$SQUASH_FILE" 2>/dev/null
+
+  # ── First-boot Scripts in installiertes System injizieren ─────────────
+  TARGET="$WORK_DIR/squashfs-extract"
+  echo "  First-boot Scripts injizieren..."
+
+  # Scripts nach /root/ (wird auf die installierte Disk kopiert)
+  install -m 755 "$SCRIPT_DIR/first-boot.sh" "$TARGET/root/openclaw-first-boot.sh"
+  install -m 644 "$SCRIPT_DIR/first-boot.service" "$TARGET/etc/systemd/system/openclaw-first-boot.service"
+  install -m 755 "$SCRIPT_DIR/yubikey-enroll.sh" "$TARGET/root/" 2>/dev/null || true
+  install -m 755 "$SCRIPT_DIR/zfs-unlock.sh" "$TARGET/usr/local/bin/" 2>/dev/null || true
+  install -m 644 "$SCRIPT_DIR/zfs-unlock.service" "$TARGET/etc/systemd/system/" 2>/dev/null || true
+  install -m 755 "$SCRIPT_DIR/zfs-pool-create.sh" "$TARGET/root/" 2>/dev/null || true
+
+  # answer.toml für Proxmox Installer (wird vom ISO-Installer gelesen)
+  install -m 644 "$SCRIPT_DIR/answer.toml" "$TARGET/etc/proxmox-installer/answer.toml" 2>/dev/null || \
+  install -m 644 "$SCRIPT_DIR/answer.toml" "$WORK_DIR/iso-extract/answer.toml"
+
+  # systemd service enablen (Symlink)
+  ln -sf /etc/systemd/system/openclaw-first-boot.service \
+    "$TARGET/etc/systemd/system/multi-user.target.wants/openclaw-first-boot.service" 2>/dev/null || true
+
+  # squashfs neu packen
+  echo "  squashfs neu packen..."
+  rm "$SQUASH_FILE"
+  mksquashfs "$WORK_DIR/squashfs-extract" "$SQUASH_FILE" -comp gzip -noappend -quiet
+
+  # ISO neu erstellen
+  echo "  ISO neu bauen..."
+  VOLID="ProxmoxVE"
+  xorriso -as mkisofs \
+    -V "$VOLID" \
+    -J -joliet-long \
+    -r \
+    -isohybrid-mbr /usr/lib/ISOLINUX/isohdpfx.bin 2>/dev/null || true \
+    -partition_offset 16 \
+    -c boot/boot.cat \
+    -b boot/grub/i386-pc/eltorito.img \
+    -no-emul-boot \
+    -boot-load-size 4 \
+    -boot-info-table \
+    --grub2-boot-info \
+    --grub2-mbr /usr/lib/grub/i386-pc/boot_hybrid.img 2>/dev/null \
+    -eltorito-alt-boot \
+    -e boot/grub/efi.img \
+    -no-emul-boot \
+    -isohybrid-gpt-basdat \
+    -o "$OUTPUT_ISO" \
+    "$WORK_DIR/iso-extract" 2>/dev/null
+
+  echo "  ✓ Manueller ISO-Bau abgeschlossen"
+fi
+
+# ── Aufräumen ─────────────────────────────────────────────────────────────
+rm -rf "$WORK_DIR"
+
+# ── Ergebnis ──────────────────────────────────────────────────────────────
+ISO_SIZE=$(du -sh "$OUTPUT_ISO" 2>/dev/null | awk '{print $1}' || echo "?")
+echo ""
+echo "╔══════════════════════════════════════════════════════════╗"
+echo "║                    ISO erstellt!                        ║"
+echo "╚══════════════════════════════════════════════════════════╝"
+echo ""
+echo "  Output:    $OUTPUT_ISO"
+echo "  Größe:     $ISO_SIZE"
+echo ""
+echo "  USB-Stick erstellen:"
+echo "    dd if=$OUTPUT_ISO of=/dev/sdX bs=4M status=progress"
+echo "    (sdX = USB-Stick, VORSICHT: alle Daten werden gelöscht!)"
+echo ""
+echo "  Oder: Balena Etcher / Rufus (Windows) verwenden"
+echo ""
+
+# Direkt auf USB schreiben wenn --output angegeben
+if [ -n "$WRITE_TO_USB" ]; then
+  if [ ! -b "$WRITE_TO_USB" ]; then
+    echo "✗ $WRITE_TO_USB ist kein Block-Device"
+    exit 1
+  fi
+  echo "  Schreibe auf USB: $WRITE_TO_USB"
+  read -rp "  ALLE DATEN auf $WRITE_TO_USB werden gelöscht! Fortfahren? [j/N] " USB_CONFIRM
+  [[ ! "$USB_CONFIRM" =~ ^[jJyY]$ ]] && { echo "  Abgebrochen."; exit 0; }
+  dd if="$OUTPUT_ISO" of="$WRITE_TO_USB" bs=4M status=progress
+  sync
+  echo "  ✓ USB-Stick fertig: $WRITE_TO_USB"
+fi
+
+echo "  Nächste Schritte nach Installation:"
+echo "    1. USB booten → Proxmox installiert sich automatisch"
+echo "    2. Neustart → LUKS-Passphrase eingeben"
+echo "    3. first-boot.service startet LXC 10/20/107"
+echo "    4. Browser: http://<IP> → CasaOS App-Store"
+echo ""
