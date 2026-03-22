@@ -43,14 +43,20 @@ done
 # das 192.168.10.x Subnetz nicht kennt (z.B. VirtualBox NAT, einfache Router).
 log "Aktiviere IP-Masquerade für LXC-Netzwerk..."
 sysctl -w net.ipv4.ip_forward=1 >/dev/null
-# Persistenz über Neustarts
 grep -q 'net.ipv4.ip_forward=1' /etc/sysctl.conf 2>/dev/null || \
   echo 'net.ipv4.ip_forward=1' >> /etc/sysctl.conf
-# Masquerade nur hinzufügen wenn nicht schon vorhanden
-iptables -t nat -C POSTROUTING -s 192.168.10.0/24 -j MASQUERADE 2>/dev/null || \
-  iptables -t nat -A POSTROUTING -s 192.168.10.0/24 -j MASQUERADE
-# Regel für Neustarts speichern
-command -v iptables-save &>/dev/null && iptables-save > /etc/iptables/rules.v4 2>/dev/null || true
+
+# Falls kein Router bei 192.168.10.1 vorhanden (z.B. VirtualBox NAT):
+# Proxmox-Host selbst als Gateway einrichten, damit LXC-Pakete den Host erreichen.
+if ! ping -c1 -W2 192.168.10.1 &>/dev/null; then
+  log "  Kein Router bei 192.168.10.1 — setze Host als LXC-Gateway (NAT-Modus)"
+  ip addr show vmbr0 | grep -q '192.168.10.1/24' || \
+    ip addr add 192.168.10.1/24 dev vmbr0
+fi
+
+# Masquerade: LXC-Traffic über Host-Uplink NATen
+iptables -t nat -C POSTROUTING -s 192.168.10.0/24 ! -d 192.168.10.0/24 -j MASQUERADE 2>/dev/null || \
+  iptables -t nat -A POSTROUTING -s 192.168.10.0/24 ! -d 192.168.10.0/24 -j MASQUERADE
 log "✓ IP-Masquerade aktiv"
 
 # ── Schritt 2: Proxmox Repos fixen (Enterprise → No-Subscription) ─────────
