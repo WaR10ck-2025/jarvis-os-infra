@@ -14,10 +14,10 @@ services:
       - CASAOS_API_TOKEN=${CASAOS_API_TOKEN:-}
       - CASAOS_CUSTOM_STORES=${CASAOS_CUSTOM_STORES:-}
       - BRIDGE_DB_PATH=/data/apps.db
+      - PROXMOX_SSH_KEY=/app/.ssh/proxmox_key
     volumes:
       - bridge-data:/data
-      # Proxmox pct-Zugriff: Bridge läuft auf CasaOS-LXC, pct muss via SSH zum Proxmox-Host
-      # Alternative: Proxmox-Agent auf dem Host, der pct-Befehle entgegennimmt
+      - /root/.ssh/proxmox_key:/app/.ssh/proxmox_key:ro
     networks:
       - openclaw-net
 

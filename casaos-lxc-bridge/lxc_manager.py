@@ -97,7 +97,7 @@ def install(
 
         # 2. LXC starten
         proxmox.start_lxc(lxc_id)
-        _wait_for_network(proxmox, lxc_id)
+        _wait_for_network(ip)
 
         # 3. Compose-Datei im LXC ablegen
         app_dir = f"/opt/{meta.app_id}"
@@ -161,15 +161,16 @@ def sync_status() -> None:
     conn.commit()
 
 
-def _wait_for_network(proxmox: ProxmoxClient, lxc_id: int, timeout: int = 60) -> None:
-    """Wartet bis der LXC per ping erreichbar ist (netzwerk-ready)."""
+def _wait_for_network(ip: str, timeout: int = 60) -> None:
+    """Wartet bis der LXC per TCP erreichbar ist (Port 22 = sshd)."""
+    import socket
     for _ in range(timeout):
         try:
-            proxmox.exec_in_lxc(lxc_id, "ping -c1 -W1 192.168.10.1 >/dev/null 2>&1")
-            return
-        except Exception:
+            with socket.create_connection((ip, 22), timeout=2):
+                return
+        except OSError:
             time.sleep(1)
-    raise TimeoutError(f"LXC {lxc_id} nicht im Netzwerk nach {timeout}s")
+    raise TimeoutError(f"LXC {ip} nicht im Netzwerk nach {timeout}s")
 
 
 def _patch_compose(meta: AppMeta) -> str:

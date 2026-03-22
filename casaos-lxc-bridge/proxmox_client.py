@@ -16,6 +16,7 @@ import urllib.parse
 from dataclasses import dataclass
 
 PROXMOX_HOST = os.getenv("PROXMOX_HOST", "https://192.168.10.147:8006")
+PROXMOX_SSH_KEY = os.getenv("PROXMOX_SSH_KEY", "/app/.ssh/proxmox_key")
 PROXMOX_TOKEN = os.getenv("PROXMOX_TOKEN", "")   # PVEAPIToken=casaos@pve!casaos-bridge-token=<uuid>
 PROXMOX_NODE = os.getenv("PROXMOX_NODE", "pve")
 TEMPLATE_ID = int(os.getenv("PROXMOX_TEMPLATE_ID", "9000"))
@@ -130,11 +131,16 @@ class ProxmoxClient:
         return result.get("data", {}).get("status", "unknown")
 
     def exec_in_lxc(self, lxc_id: int, command: str) -> None:
-        """Führt Shell-Befehl via pct exec aus (blocking via Proxmox Task-API)."""
-        import subprocess
-        result = subprocess.run(
-            ["pct", "exec", str(lxc_id), "--", "bash", "-c", command],
-            capture_output=True, text=True, timeout=300
-        )
+        """Führt Shell-Befehl im LXC aus — via SSH zum Proxmox-Host + pct exec."""
+        import subprocess, re
+        host_ip = re.sub(r"https?://([^:/]+).*", r"\1", PROXMOX_HOST)
+        ssh_cmd = [
+            "ssh", "-i", PROXMOX_SSH_KEY,
+            "-o", "StrictHostKeyChecking=no",
+            "-o", "ConnectTimeout=10",
+            f"root@{host_ip}",
+            f"pct exec {lxc_id} -- bash -c {repr(command)}",
+        ]
+        result = subprocess.run(ssh_cmd, capture_output=True, text=True, timeout=300)
         if result.returncode != 0:
-            raise RuntimeError(f"pct exec failed: {result.stderr}")
+            raise RuntimeError(f"pct exec failed (SSH): {result.stderr}")
