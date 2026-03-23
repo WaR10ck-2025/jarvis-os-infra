@@ -109,6 +109,15 @@ def provision_user(username: str, quota: str = "100G") -> dict:
         conn.execute("UPDATE users SET casaos_lxc_id=? WHERE user_id=?", (casaos_lxc_id, user_id))
         conn.commit()
 
+        # cgroup2: Kernelzugriff auf physische Blockgeräte verweigern
+        # Major 8 = sd* (SATA/SCSI), 259 = nvme* (NVMe block), 65 = erweiterter SCSI-Bereich
+        proxmox._ssh_run(
+            f"printf 'lxc.cgroup2.devices.deny: b 8:* rwm\\n"
+            f"lxc.cgroup2.devices.deny: b 259:* rwm\\n"
+            f"lxc.cgroup2.devices.deny: b 65:* rwm\\n' "
+            f">> /etc/pve/lxc/{casaos_lxc_id}.conf"
+        )
+
         # Schritt 5: ZFS-Datasets im LXC mounten (vor dem Start!)
         _set_step(conn, user_id, "mounting_zfs_datasets")
         mount_dataset_in_lxc(username, casaos_lxc_id, proxmox)

@@ -140,6 +140,85 @@ echo "  ✓ Samba konfiguriert (Passwort wird bei User-Anlage gesetzt)"
 systemctl enable ssh
 systemctl start ssh || true
 
+# ── Host-Blockgeräte vor CasaOS verbergen ────────────────────────────────────
+# Privilegierte LXC-Container erhalten Geräteknoten für alle Host-Laufwerke.
+# Diese udev-Regel + Service verhindert, dass CasaOS sie im Storage-Manager anzeigt.
+echo "── Hide-Host-Disks konfigurieren ────────────────"
+
+# lsblk-Wrapper: filtert Host-Blockgeräte aus casaos-local-storage's Sicht.
+# lsblk liest /sys/block/ — ohne Wrapper wären Drives trotz fehlender /dev-Nodes sichtbar.
+cat > /usr/bin/lsblk-real << 'REALEND'
+#!/bin/bash
+exec /usr/bin/lsblk.real "$@"
+REALEND
+# Original sichern (idempotent)
+[ -f /usr/bin/lsblk.real ] || cp /usr/bin/lsblk /usr/bin/lsblk.real
+
+cat > /usr/bin/lsblk << 'PYEND'
+#!/usr/bin/env python3
+"""lsblk wrapper: filtert Host-Blockgeraete (sd*, nvme*, hd*, vd*) aus Output.
+Verhindert dass casaos-local-storage physische Proxmox-Laufwerke erkennt."""
+import subprocess, json, sys, re
+
+HIDDEN = ('sd', 'nvme', 'hd', 'vd')
+TREE_RE = re.compile(r'^[|`\- ]*(\S+)')
+
+result = subprocess.run(['/usr/bin/lsblk.real'] + sys.argv[1:],
+                        capture_output=True, text=True)
+
+if '-J' in sys.argv or '--json' in sys.argv:
+    try:
+        data = json.loads(result.stdout)
+        data['blockdevices'] = [
+            d for d in data.get('blockdevices', [])
+            if not any(d.get('name', '').startswith(p) for p in HIDDEN)
+        ]
+        print(json.dumps(data))
+    except Exception:
+        print(result.stdout, end='')
+else:
+    for line in result.stdout.splitlines():
+        m = TREE_RE.match(line)
+        if m and any(m.group(1).startswith(p) for p in HIDDEN):
+            continue
+        print(line)
+
+if result.stderr:
+    print(result.stderr, end='', file=sys.stderr)
+sys.exit(result.returncode)
+PYEND
+chmod +x /usr/bin/lsblk
+echo "  ✓ lsblk-Wrapper installiert (filtert sd/nvme/hd/vd)"
+
+cat > /etc/udev/rules.d/99-lxc-hide-host-disks.rules << 'UDEV'
+# LXC: Host-Blockgeräte (SATA/NVMe) sofort nach Erstellung entfernen,
+# damit casaos-local-storage sie nicht als "Found a new drive" meldet.
+SUBSYSTEM=="block", KERNEL=="sd[a-z]",       OPTIONS+="nowatch", RUN+="/bin/rm -f /dev/%k"
+SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", OPTIONS+="nowatch", RUN+="/bin/rm -f /dev/%k"
+SUBSYSTEM=="block", KERNEL=="nvme[0-9]*",    OPTIONS+="nowatch", RUN+="/bin/rm -f /dev/%k"
+SUBSYSTEM=="block", KERNEL=="hd[a-z]*",      OPTIONS+="nowatch", RUN+="/bin/rm -f /dev/%k"
+SUBSYSTEM=="block", KERNEL=="vd[a-z]*",      OPTIONS+="nowatch", RUN+="/bin/rm -f /dev/%k"
+UDEV
+
+cat > /etc/systemd/system/casaos-hide-host-disks.service << 'SVC'
+[Unit]
+Description=Hide host physical block devices from CasaOS LXC
+DefaultDependencies=no
+Before=casaos-local-storage.service
+After=udev.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/bin/bash -c 'rm -f /dev/sd[a-z] /dev/sd[a-z][0-9]* /dev/nvme* /dev/hd[a-z]* /dev/vd[a-z]*'
+
+[Install]
+WantedBy=sysinit.target
+SVC
+
+systemctl enable casaos-hide-host-disks.service
+echo "  ✓ udev-Regeln + hide-disks.service aktiviert"
+
 echo ""
 echo "══════════════════════════════════════════════════"
 echo "  CasaOS User-Template (LXC 9001) — FERTIG"
