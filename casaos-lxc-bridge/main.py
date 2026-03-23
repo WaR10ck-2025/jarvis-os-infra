@@ -53,11 +53,29 @@ BRIDGE_LXC_ID = int(os.getenv("BRIDGE_LXC_ID", "120"))
 # Katalog-Cache: wird beim Start befüllt + alle 6h refreshed
 # ---------------------------------------------------------------------------
 _catalog_cache: dict = {"apps": [], "last_update": 0.0}
+_store_zip_cache: dict = {"zip_bytes": b"", "last_update": 0.0}
 _CACHE_TTL = 6 * 3600   # 6 Stunden
 
 
+def _build_store_zip_sync(apps: list) -> bytes:
+    """Baut den Store-ZIP synchron im Memory. Für asyncio.to_thread()."""
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        for app_entry in apps:
+            app_id = app_entry.get("app_id")
+            if not app_id:
+                continue
+            try:
+                meta = app_resolver.resolve(app_id)
+                compose = _to_casaos_format(meta)
+                zf.writestr(f"casaos-store/Apps/{app_id}/docker-compose.yml", compose)
+            except Exception:
+                continue
+    return buf.getvalue()
+
+
 async def _refresh_catalog_cache() -> None:
-    """Befüllt den Katalog-Cache async im Hintergrund."""
+    """Befüllt den Katalog-Cache + ZIP-Cache async im Hintergrund."""
     try:
         all_apps = await asyncio.to_thread(app_resolver.list_all_apps_with_meta)
         _catalog_cache["apps"] = all_apps
@@ -65,6 +83,16 @@ async def _refresh_catalog_cache() -> None:
         logger.info(f"Katalog-Cache aktualisiert: {len(all_apps)} Apps")
     except Exception as e:
         logger.warning(f"Katalog-Cache-Refresh fehlgeschlagen: {e}")
+        return
+
+    # ZIP-Cache nach Katalog-Refresh neu bauen
+    try:
+        zip_bytes = await asyncio.to_thread(_build_store_zip_sync, _catalog_cache["apps"])
+        _store_zip_cache["zip_bytes"] = zip_bytes
+        _store_zip_cache["last_update"] = time.time()
+        logger.info(f"Store-ZIP-Cache aktualisiert: {len(zip_bytes)} Bytes")
+    except Exception as e:
+        logger.warning(f"Store-ZIP-Cache-Refresh fehlgeschlagen: {e}")
 
 
 async def _schedule_cache_refresh() -> None:
@@ -408,27 +436,21 @@ async def casaos_store_zip(request: Request):
     """
     GitHub-Archive-kompatibler ZIP-Download des Custom Stores.
     CasaOS v0.4.15+ erwartet eine ZIP-URL beim Registrieren von Custom Stores.
-    HEAD wird unterstützt damit CasaOS Content-Length prüfen kann.
+    HEAD antwortet sofort aus dem Cache (CasaOS-Timeout-sicher).
     Struktur: casaos-store/Apps/{app_id}/docker-compose.yml
     """
-    apps = _catalog_cache["apps"]
-    if not apps:
-        apps = await asyncio.to_thread(app_resolver.list_all_apps_with_meta)
+    zip_bytes = _store_zip_cache["zip_bytes"]
 
-    buf = io.BytesIO()
-    with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as zf:
-        for app_entry in apps:
-            app_id = app_entry.get("app_id")
-            if not app_id:
-                continue
-            try:
-                meta = await asyncio.to_thread(app_resolver.resolve, app_id)
-                compose = _to_casaos_format(meta)
-                zf.writestr(f"casaos-store/Apps/{app_id}/docker-compose.yml", compose)
-            except Exception:
-                continue
+    # Fallback: ZIP synchron bauen wenn Cache noch leer (Erststart)
+    if not zip_bytes:
+        apps = _catalog_cache["apps"]
+        if not apps:
+            apps = await asyncio.to_thread(app_resolver.list_all_apps_with_meta)
+            _catalog_cache["apps"] = apps
+        zip_bytes = await asyncio.to_thread(_build_store_zip_sync, apps)
+        _store_zip_cache["zip_bytes"] = zip_bytes
+        _store_zip_cache["last_update"] = time.time()
 
-    zip_bytes = buf.getvalue()
     headers = {
         "Content-Disposition": "attachment; filename=casaos-store.zip",
         "Content-Length": str(len(zip_bytes)),
