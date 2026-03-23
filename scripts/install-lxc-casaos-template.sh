@@ -98,18 +98,27 @@ mkdir -p /DATA/AppData /DATA/Gallery /opt/casaos-bridge
 echo "── OpenClaw App-Store vorregistrieren ───────────────"
 BRIDGE_STORE_URL="${BRIDGE_URL:-http://192.168.10.141:8200}/casaos-store.zip"
 
-# Sicherstellen dass [server]-Sektion existiert
-grep -q '^\[server\]' /etc/casaos/app-management.conf 2>/dev/null || \
-  echo "[server]" >> /etc/casaos/app-management.conf
-
-# Idempotent eintragen (nur wenn nicht schon vorhanden)
-grep -q "casaos-store.zip" /etc/casaos/app-management.conf 2>/dev/null || \
-  sed -i "/^\[server\]/a appstore = ${BRIDGE_STORE_URL}" /etc/casaos/app-management.conf
+python3 - "$BRIDGE_STORE_URL" << 'PYEND'
+import sys, re
+store_line = f"appstore = {sys.argv[1]}"
+path = "/etc/casaos/app-management.conf"
+try:
+    content = open(path).read()
+except FileNotFoundError:
+    content = "[server]\n"
+if store_line not in content:
+    if "[server]" not in content:
+        content += "\n[server]\n"
+    content = re.sub(r"(\[server\])", r"\1\n" + store_line, content)
+    open(path, "w").write(content)
+    print(f"  ✓ OpenClaw Store vorregistriert: {sys.argv[1]}")
+else:
+    print(f"  ✓ OpenClaw Store bereits registriert: {sys.argv[1]}")
+PYEND
 
 # CasaOS App-Management neu starten damit Store-Download startet
 systemctl restart casaos-app-management 2>/dev/null || true
 sleep 5
-echo "  ✓ OpenClaw Store vorregistriert: ${BRIDGE_STORE_URL}"
 
 # ── Samba konfigurieren ───────────────────────────────────────────────────────
 echo "── Samba konfigurieren ──────────────────────────"
