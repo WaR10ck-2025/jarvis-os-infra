@@ -378,21 +378,24 @@
       <thead><tr>
         <th>User</th>
         <th>Status</th>
-        <th>CasaOS-URL</th>
+        <th>Lokale Adresse</th>
         <th>Subnetz</th>
         <th style="text-align:right">Aktionen</th>
       </tr></thead><tbody>`;
 
     users.forEach(u => {
       const isExpanded = expandedUser === u.user_id;
+      const localIp = u.casaos_url ? u.casaos_url.replace('http://', '') : null;
       html += `<tr id="row-${u.user_id}">
         <td>
           <span class="user-name">${esc(u.username)}</span>
           <span class="user-id"> #${u.user_id}</span>
         </td>
         <td>${statusBadge(u)}</td>
-        <td>${u.casaos_url
-              ? `<a href="${esc(u.casaos_url)}" target="_blank" style="color:var(--accent);font-size:.85rem">${esc(u.casaos_url)}</a>`
+        <td>${localIp
+              ? `<span style="font-family:monospace;font-size:.85rem;color:var(--text)">${esc(localIp)}</span>
+                 <a href="${esc(u.casaos_url)}" target="_blank"
+                    style="color:var(--muted);font-size:.75rem;margin-left:6px" title="Im Browser öffnen">↗</a>`
               : '<span style="color:var(--muted);font-size:.85rem">—</span>'
             }</td>
         <td style="font-size:.85rem;font-family:monospace;color:var(--muted)">${esc(u.subnet)}</td>
@@ -473,7 +476,13 @@
       : null;
 
     return `
-      <!-- API-Key -->
+      <!-- Lokale Adresse + API-Key -->
+      <div class="api-key-row">
+        <label>Lok. Adresse</label>
+        <div class="key-val">${esc(ip !== '—' ? ip : '—')}</div>
+        ${ip !== '—' ? `<button class="btn btn-ghost btn-sm" onclick="copy(${JSON.stringify(ip)}, this)">📋</button>
+        <a href="${esc(u.casaos_url)}" target="_blank" class="btn btn-ghost btn-sm" style="text-decoration:none">↗</a>` : ''}
+      </div>
       <div class="api-key-row">
         <label>API-Key</label>
         <div class="key-val" id="apikey-${u.user_id}">${esc(u.api_key || '—')}</div>
