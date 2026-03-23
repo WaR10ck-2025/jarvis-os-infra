@@ -31,7 +31,7 @@ import logging
 import textwrap
 import json
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException, Query, Depends
+from fastapi import FastAPI, HTTPException, Query, Depends, Request
 import io
 import zipfile
 from fastapi.responses import JSONResponse, RedirectResponse, PlainTextResponse, Response
@@ -403,11 +403,12 @@ async def casaos_store_app(app_id: str):
     return PlainTextResponse(compose, media_type="text/plain")
 
 
-@app.get("/casaos-store.zip")
-async def casaos_store_zip():
+@app.api_route("/casaos-store.zip", methods=["GET", "HEAD"])
+async def casaos_store_zip(request: Request):
     """
     GitHub-Archive-kompatibler ZIP-Download des Custom Stores.
     CasaOS v0.4.15+ erwartet eine ZIP-URL beim Registrieren von Custom Stores.
+    HEAD wird unterstützt damit CasaOS Content-Length prüfen kann.
     Struktur: casaos-store/Apps/{app_id}/docker-compose.yml
     """
     apps = _catalog_cache["apps"]
@@ -427,12 +428,14 @@ async def casaos_store_zip():
             except Exception:
                 continue
 
-    buf.seek(0)
-    return Response(
-        content=buf.read(),
-        media_type="application/zip",
-        headers={"Content-Disposition": "attachment; filename=casaos-store.zip"},
-    )
+    zip_bytes = buf.getvalue()
+    headers = {
+        "Content-Disposition": "attachment; filename=casaos-store.zip",
+        "Content-Length": str(len(zip_bytes)),
+    }
+    if request.method == "HEAD":
+        return Response(headers=headers, media_type="application/zip")
+    return Response(content=zip_bytes, media_type="application/zip", headers=headers)
 
 
 # ---------------------------------------------------------------------------
