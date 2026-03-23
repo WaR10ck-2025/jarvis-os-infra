@@ -1,0 +1,728 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OpenClaw Admin</title>
+  <script src="/static/qrcode.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0f1117;
+      --surface: #1a1d27;
+      --surface2: #22263a;
+      --border: #2a2d3a;
+      --accent: #4f7cff;
+      --accent-hover: #6b93ff;
+      --green: #22c55e;
+      --red: #ef4444;
+      --yellow: #f59e0b;
+      --text: #e2e8f0;
+      --muted: #64748b;
+      --radius: 12px;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    /* ── Header ─────────────────────────────────────────────── */
+    header {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 16px 24px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      position: sticky; top: 0; z-index: 100;
+    }
+    .logo {
+      width: 36px; height: 36px; border-radius: 9px; flex-shrink: 0;
+      background: linear-gradient(135deg, var(--accent), #7c3aed);
+      display: grid; place-items: center; font-size: 1.2rem;
+    }
+    header h1 { font-size: 1.1rem; font-weight: 700; letter-spacing: -0.02em; }
+    header p  { color: var(--muted); font-size: 0.8rem; margin-top: 1px; }
+
+    .key-form {
+      display: flex; gap: 8px; margin-left: auto; align-items: center;
+    }
+    .key-form input {
+      background: var(--bg); border: 1px solid var(--border);
+      color: var(--text); padding: 7px 12px; border-radius: 8px;
+      font-size: 0.85rem; width: 260px;
+      outline: none; transition: border-color .2s;
+    }
+    .key-form input:focus { border-color: var(--accent); }
+    .key-status {
+      font-size: 0.75rem; color: var(--green); display: none;
+    }
+    .key-status.visible { display: block; }
+
+    /* ── Buttons ─────────────────────────────────────────────── */
+    .btn {
+      padding: 7px 14px; border-radius: 8px; border: none; cursor: pointer;
+      font-size: 0.85rem; font-weight: 500; transition: all .15s;
+    }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-primary:hover { background: var(--accent-hover); }
+    .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
+    .btn-sm { padding: 5px 10px; font-size: 0.78rem; border-radius: 7px; }
+    .btn-ghost { background: transparent; border: 1px solid var(--border); color: var(--text); }
+    .btn-ghost:hover { border-color: var(--accent); color: var(--accent); }
+    .btn-danger { background: transparent; border: 1px solid transparent; color: var(--muted); }
+    .btn-danger:hover { color: var(--red); border-color: var(--red); }
+    .btn-icon { background: transparent; border: none; padding: 5px; cursor: pointer;
+                font-size: 1rem; border-radius: 6px; color: var(--muted); transition: all .15s; }
+    .btn-icon:hover { color: var(--text); background: var(--border); }
+
+    /* ── Main Layout ─────────────────────────────────────────── */
+    main { padding: 28px 24px; max-width: 1100px; margin: 0 auto; }
+
+    .section-header {
+      display: flex; align-items: center; gap: 12px;
+      margin-bottom: 16px;
+    }
+    .section-header h2 { font-size: 1rem; font-weight: 600; }
+    .count-badge {
+      background: var(--border); color: var(--muted);
+      font-size: 0.72rem; padding: 2px 8px; border-radius: 20px;
+    }
+    .section-header .btn { margin-left: auto; }
+
+    /* ── Toast ───────────────────────────────────────────────── */
+    #toast {
+      position: fixed; bottom: 24px; right: 24px;
+      background: var(--surface2); border: 1px solid var(--border);
+      color: var(--text); padding: 12px 18px; border-radius: 10px;
+      font-size: 0.85rem; transform: translateY(80px); opacity: 0;
+      transition: all .25s; z-index: 999;
+    }
+    #toast.show { transform: translateY(0); opacity: 1; }
+    #toast.ok  { border-color: var(--green); }
+    #toast.err { border-color: var(--red); }
+
+    /* ── User Table ──────────────────────────────────────────── */
+    .user-table {
+      width: 100%;
+      border-collapse: collapse;
+      background: var(--surface);
+      border-radius: var(--radius);
+      overflow: hidden;
+      border: 1px solid var(--border);
+    }
+    .user-table th {
+      text-align: left; font-size: 0.75rem; color: var(--muted);
+      padding: 10px 16px; background: var(--surface2);
+      text-transform: uppercase; letter-spacing: .05em;
+      border-bottom: 1px solid var(--border);
+    }
+    .user-table td {
+      padding: 12px 16px; font-size: 0.875rem;
+      border-bottom: 1px solid var(--border);
+      vertical-align: middle;
+    }
+    .user-table tr:last-child td { border-bottom: none; }
+    .user-table tr.detail-row td { padding: 0; background: var(--surface2); }
+    .user-table tr:hover:not(.detail-row) { background: var(--surface2); }
+
+    .user-name { font-weight: 600; }
+    .user-id   { color: var(--muted); font-size: 0.75rem; }
+
+    /* ── Status Badge ────────────────────────────────────────── */
+    .badge {
+      display: inline-flex; align-items: center; gap: 5px;
+      font-size: 0.78rem; font-weight: 500;
+      padding: 3px 9px; border-radius: 20px;
+    }
+    .badge-ready    { background: rgba(34,197,94,.15); color: var(--green); }
+    .badge-prov     { background: rgba(79,124,255,.15); color: var(--accent); }
+    .badge-error    { background: rgba(239,68,68,.15);  color: var(--red); }
+    .badge-deleting { background: rgba(245,158,11,.15); color: var(--yellow); }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spin { display: inline-block; animation: spin 1.2s linear infinite; }
+
+    /* ── Action Buttons (in Tabelle) ─────────────────────────── */
+    .row-actions { display: flex; gap: 4px; justify-content: flex-end; }
+
+    .confirm-delete {
+      display: flex; align-items: center; gap: 6px;
+    }
+    .confirm-delete span { font-size: 0.78rem; color: var(--red); }
+
+    /* ── Detail Panel ────────────────────────────────────────── */
+    .detail-panel {
+      padding: 20px 20px 24px;
+      display: none;
+    }
+    .detail-panel.open { display: block; }
+
+    .detail-panel .api-key-row {
+      display: flex; align-items: center; gap: 10px;
+      margin-bottom: 20px;
+    }
+    .detail-panel .api-key-row label { font-size: 0.8rem; color: var(--muted); min-width: 70px; }
+    .key-val {
+      font-family: monospace; font-size: 0.8rem;
+      background: var(--bg); border: 1px solid var(--border);
+      padding: 5px 10px; border-radius: 7px; flex: 1;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+
+    /* ── QR Cards ────────────────────────────────────────────── */
+    .qr-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 16px;
+    }
+    .qr-card {
+      background: var(--bg); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 16px;
+    }
+    .qr-card h3 {
+      font-size: 0.8rem; font-weight: 600; color: var(--muted);
+      text-transform: uppercase; letter-spacing: .06em;
+      margin-bottom: 14px;
+    }
+    .qr-card .qr-inner {
+      display: flex; gap: 16px; align-items: flex-start;
+    }
+    .qr-img-wrap {
+      flex-shrink: 0; background: #fff; padding: 6px;
+      border-radius: 8px; line-height: 0;
+    }
+    .qr-img-wrap canvas, .qr-img-wrap img { display: block; }
+
+    .qr-info { flex: 1; min-width: 0; }
+    .qr-info .info-row {
+      display: flex; align-items: center; gap: 8px;
+      margin-bottom: 8px;
+    }
+    .qr-info .info-row label { font-size: 0.75rem; color: var(--muted); min-width: 60px; }
+    .info-val {
+      font-family: monospace; font-size: 0.78rem;
+      background: var(--surface2); padding: 4px 8px; border-radius: 6px;
+      flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .qr-info .link-btn {
+      color: var(--accent); text-decoration: none; font-size: 0.8rem;
+    }
+    .qr-info .link-btn:hover { text-decoration: underline; }
+
+    /* ── Empty / Loading States ──────────────────────────────── */
+    .empty {
+      text-align: center; padding: 48px 0;
+      color: var(--muted); font-size: 0.9rem;
+    }
+    .empty .big { font-size: 2rem; margin-bottom: 8px; }
+
+    /* ── Modal ───────────────────────────────────────────────── */
+    .modal-backdrop {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,.6); z-index: 200;
+      place-items: center;
+    }
+    .modal-backdrop.open { display: grid; }
+    .modal {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 28px;
+      width: min(400px, 90vw);
+    }
+    .modal h2 { font-size: 1.1rem; font-weight: 700; margin-bottom: 20px; }
+    .form-group { margin-bottom: 16px; }
+    .form-group label {
+      display: block; font-size: 0.8rem; color: var(--muted);
+      margin-bottom: 6px;
+    }
+    .form-group input {
+      width: 100%; background: var(--bg); border: 1px solid var(--border);
+      color: var(--text); padding: 9px 12px; border-radius: 8px;
+      font-size: 0.9rem; outline: none; transition: border-color .2s;
+    }
+    .form-group input:focus { border-color: var(--accent); }
+    .modal-actions { display: flex; gap: 10px; margin-top: 24px; justify-content: flex-end; }
+  </style>
+</head>
+<body>
+
+<!-- ── Header ─────────────────────────────────────────────────── -->
+<header>
+  <div class="logo">🌉</div>
+  <div>
+    <h1>OpenClaw Admin</h1>
+    <p>Multi-Tenant User-Verwaltung</p>
+  </div>
+
+  <div class="key-form">
+    <input id="keyInput" type="password" placeholder="Admin-Key eingeben…"
+           onkeydown="if(event.key==='Enter') login()">
+    <button class="btn btn-primary btn-sm" onclick="login()">Login</button>
+    <span class="key-status" id="keyStatus">● Angemeldet</span>
+  </div>
+</header>
+
+<!-- ── Main ───────────────────────────────────────────────────── -->
+<main id="mainContent" style="display:none">
+  <div class="section-header">
+    <h2>Users</h2>
+    <span class="count-badge" id="userCount">0</span>
+    <button class="btn btn-primary btn-sm" onclick="openModal()">+ Neuer User</button>
+  </div>
+
+  <div id="tableWrap">
+    <div class="empty"><div class="big">👥</div>Keine User angelegt.</div>
+  </div>
+</main>
+
+<!-- ── Toast ──────────────────────────────────────────────────── -->
+<div id="toast"></div>
+
+<!-- ── Modal: Neuer User ──────────────────────────────────────── -->
+<div class="modal-backdrop" id="modal" onclick="if(event.target===this)closeModal()">
+  <div class="modal">
+    <h2>Neuer User</h2>
+    <div class="form-group">
+      <label>Username</label>
+      <input id="newUsername" type="text" placeholder="alice"
+             onkeydown="if(event.key==='Enter') submitCreate()">
+    </div>
+    <div class="form-group">
+      <label>Speicher-Quota (ZFS)</label>
+      <input id="newQuota" type="text" value="100G" placeholder="100G">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">Abbrechen</button>
+      <button class="btn btn-primary" id="createBtn" onclick="submitCreate()">Anlegen →</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  /* ── State ──────────────────────────────────────────────────── */
+  let adminKey       = sessionStorage.getItem('adminKey') || '';
+  let users          = [];
+  let expandedUser   = null;   // user_id oder null
+  let pollingTimers  = {};     // user_id → intervalId
+  let detailCache    = {};     // user_id → full status object
+
+  const STEPS = {
+    'creating_bridge':       'Netzwerk anlegen…',
+    'creating_zfs_datasets': 'Speicher anlegen…',
+    'cloning_casaos_lxc':    'CasaOS klonen…',
+    'mounting_zfs_datasets': 'Speicher einhängen…',
+    'starting_casaos_lxc':   'CasaOS starten…',
+    'deploying_bridge_env':  'Bridge deployen…',
+    'setting_up_headscale':  'VPN einrichten…',
+    'installing_tailscale':  'Tailscale installieren…',
+    'configuring_smb':       'SMB-Freigabe konfigurieren…',
+  };
+
+  /* ── Auth ───────────────────────────────────────────────────── */
+  async function login() {
+    const val = document.getElementById('keyInput').value.trim();
+    if (val) { adminKey = val; sessionStorage.setItem('adminKey', val); }
+    if (!adminKey) { toast('Admin-Key fehlt', 'err'); return; }
+    await loadUsers();
+  }
+
+  async function apiFetch(path, opts = {}) {
+    const r = await fetch(path, {
+      ...opts,
+      headers: { 'X-API-Key': adminKey, 'Content-Type': 'application/json', ...(opts.headers || {}) }
+    });
+    if (r.status === 403) {
+      sessionStorage.removeItem('adminKey');
+      adminKey = '';
+      document.getElementById('keyStatus').classList.remove('visible');
+      document.getElementById('mainContent').style.display = 'none';
+      toast('Ungültiger Admin-Key', 'err');
+      throw new Error('403');
+    }
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.detail || `HTTP ${r.status}`);
+    return data;
+  }
+
+  /* ── Users laden ────────────────────────────────────────────── */
+  async function loadUsers() {
+    try {
+      const data = await apiFetch('/admin/users');
+      users = data.users || [];
+      document.getElementById('mainContent').style.display = '';
+      document.getElementById('keyStatus').classList.add('visible');
+      document.getElementById('userCount').textContent = users.length;
+      renderUsers();
+      // Polling für provisionierende User starten
+      users.forEach(u => {
+        if (u.status === 'provisioning' && !pollingTimers[u.user_id]) {
+          startPolling(u.user_id);
+        }
+      });
+    } catch(e) {
+      if (e.message !== '403') toast('Fehler: ' + e.message, 'err');
+    }
+  }
+
+  /* ── Tabelle rendern ────────────────────────────────────────── */
+  function renderUsers() {
+    const wrap = document.getElementById('tableWrap');
+    if (!users.length) {
+      wrap.innerHTML = '<div class="empty"><div class="big">👥</div>Keine User angelegt.</div>';
+      return;
+    }
+    let html = `<table class="user-table">
+      <thead><tr>
+        <th>User</th>
+        <th>Status</th>
+        <th>CasaOS-URL</th>
+        <th>Subnetz</th>
+        <th style="text-align:right">Aktionen</th>
+      </tr></thead><tbody>`;
+
+    users.forEach(u => {
+      const isExpanded = expandedUser === u.user_id;
+      html += `<tr id="row-${u.user_id}">
+        <td>
+          <span class="user-name">${esc(u.username)}</span>
+          <span class="user-id"> #${u.user_id}</span>
+        </td>
+        <td>${statusBadge(u)}</td>
+        <td>${u.casaos_url
+              ? `<a href="${esc(u.casaos_url)}" target="_blank" style="color:var(--accent);font-size:.85rem">${esc(u.casaos_url)}</a>`
+              : '<span style="color:var(--muted);font-size:.85rem">—</span>'
+            }</td>
+        <td style="font-size:.85rem;font-family:monospace;color:var(--muted)">${esc(u.subnet)}</td>
+        <td>
+          <div class="row-actions">
+            <button class="btn-icon" title="Credentials anzeigen"
+                    onclick="toggleDetails(${u.user_id})">
+              ${isExpanded ? '🔼' : '👁'}
+            </button>
+            <div id="del-wrap-${u.user_id}">
+              <button class="btn btn-danger btn-sm"
+                      onclick="askDelete(${u.user_id})">🗑</button>
+            </div>
+          </div>
+        </td>
+      </tr>
+      <tr class="detail-row" id="detail-row-${u.user_id}">
+        <td colspan="5">
+          <div class="detail-panel${isExpanded ? ' open' : ''}" id="detail-${u.user_id}">
+            ${isExpanded && detailCache[u.user_id]
+              ? buildDetail(detailCache[u.user_id])
+              : '<div style="padding:24px;text-align:center;color:var(--muted);font-size:.85rem">Lade…</div>'}
+          </div>
+        </td>
+      </tr>`;
+    });
+
+    html += '</tbody></table>';
+    wrap.innerHTML = html;
+
+    // QR-Codes für aufgeklappte Zeile generieren
+    if (expandedUser && detailCache[expandedUser]) {
+      generateQRs(expandedUser, detailCache[expandedUser]);
+    }
+  }
+
+  function statusBadge(u) {
+    if (u.status === 'ready')
+      return '<span class="badge badge-ready">● Bereit</span>';
+    if (u.status === 'error')
+      return '<span class="badge badge-error">✗ Fehler</span>';
+    if (u.status === 'deleting')
+      return '<span class="badge badge-deleting"><span class="spin">⟳</span> Lösche…</span>';
+    // provisioning
+    const step = STEPS[u.provisioning_step] || (u.provisioning_step || 'Warte…');
+    return `<span class="badge badge-prov"><span class="spin">⟳</span> ${esc(step)}</span>`;
+  }
+
+  /* ── Details auf-/zuklappen ─────────────────────────────────── */
+  async function toggleDetails(userId) {
+    if (expandedUser === userId) {
+      expandedUser = null;
+      renderUsers();
+      return;
+    }
+    expandedUser = userId;
+    renderUsers();
+    // Daten laden (falls noch nicht gecacht)
+    if (!detailCache[userId]) {
+      try {
+        const data = await apiFetch(`/admin/users/${userId}/status`);
+        detailCache[userId] = data;
+        renderUsers();
+        generateQRs(userId, data);
+      } catch(e) {
+        toast('Fehler beim Laden: ' + e.message, 'err');
+      }
+    }
+  }
+
+  /* ── Detail-Panel HTML ──────────────────────────────────────── */
+  function buildDetail(u) {
+    const ip = u.casaos_url ? u.casaos_url.replace('http://', '') : '—';
+    const smb = u.smb_shares || {};
+    const vpn = u.vpn || {};
+    const smbUri = smb.password
+      ? `smb://casaos:${smb.password}@${ip}/files`
+      : null;
+
+    return `
+      <!-- API-Key -->
+      <div class="api-key-row">
+        <label>API-Key</label>
+        <div class="key-val" id="apikey-${u.user_id}">${esc(u.api_key || '—')}</div>
+        ${u.api_key ? `<button class="btn btn-ghost btn-sm" onclick="copy(${JSON.stringify(u.api_key)}, this)">📋</button>` : ''}
+      </div>
+
+      <!-- QR-Karten -->
+      <div class="qr-grid">
+
+        ${vpn.connect_hint ? `
+        <div class="qr-card">
+          <h3>🔒 VPN (Tailscale)</h3>
+          <div class="qr-inner">
+            <div class="qr-img-wrap" id="qr-vpn-${u.user_id}"></div>
+            <div class="qr-info">
+              <div class="info-row">
+                <label>Server</label>
+                <span class="info-val">${esc(vpn.headscale_url || '')}</span>
+              </div>
+              <div class="info-row">
+                <label>Namespace</label>
+                <span class="info-val">${esc(vpn.namespace || '')}</span>
+              </div>
+              <div class="info-row">
+                <label>Befehl</label>
+                <span class="info-val" style="font-size:.7rem">tailscale up …</span>
+                <button class="btn btn-ghost btn-sm" onclick="copy(${JSON.stringify(vpn.connect_hint)}, this)">📋</button>
+              </div>
+              <div style="margin-top:8px;font-size:.72rem;color:var(--muted)">
+                QR scannen → Befehl im Terminal ausführen
+              </div>
+            </div>
+          </div>
+        </div>` : ''}
+
+        ${smbUri ? `
+        <div class="qr-card">
+          <h3>📁 SMB-Freigabe</h3>
+          <div class="qr-inner">
+            <div class="qr-img-wrap" id="qr-smb-${u.user_id}"></div>
+            <div class="qr-info">
+              <div class="info-row">
+                <label>Pfad</label>
+                <span class="info-val">\\\\${esc(ip)}\\files</span>
+                <button class="btn btn-ghost btn-sm" onclick="copy('\\\\\\\\${ip}\\\\files', this)">📋</button>
+              </div>
+              <div class="info-row">
+                <label>User</label>
+                <span class="info-val">casaos</span>
+                <button class="btn btn-ghost btn-sm" onclick="copy('casaos', this)">📋</button>
+              </div>
+              <div class="info-row">
+                <label>Passwort</label>
+                <span class="info-val">${esc(smb.password || '')}</span>
+                <button class="btn btn-ghost btn-sm" onclick="copy(${JSON.stringify(smb.password || '')}, this)">📋</button>
+              </div>
+              <div style="margin-top:8px;font-size:.72rem;color:var(--muted)">
+                macOS: ⌘K → smb://… | Windows: Explorer → \\\\…
+              </div>
+            </div>
+          </div>
+        </div>` : ''}
+
+        ${u.casaos_url ? `
+        <div class="qr-card">
+          <h3>🏠 CasaOS Dashboard</h3>
+          <div class="qr-inner">
+            <div class="qr-img-wrap" id="qr-casaos-${u.user_id}"></div>
+            <div class="qr-info">
+              <div class="info-row">
+                <label>URL</label>
+                <span class="info-val">${esc(u.casaos_url)}</span>
+              </div>
+              <div style="margin-top:10px">
+                <a class="link-btn" href="${esc(u.casaos_url)}" target="_blank">
+                  Im Browser öffnen →
+                </a>
+              </div>
+              <div style="margin-top:8px;font-size:.72rem;color:var(--muted)">
+                QR scannen → Dashboard im Browser öffnen
+              </div>
+            </div>
+          </div>
+        </div>` : ''}
+
+      </div><!-- /qr-grid -->
+    `;
+  }
+
+  /* ── QR-Codes generieren ────────────────────────────────────── */
+  function generateQRs(userId, u) {
+    const ip = u.casaos_url ? u.casaos_url.replace('http://', '') : null;
+    const smb = u.smb_shares || {};
+    const vpn = u.vpn || {};
+
+    if (vpn.connect_hint) {
+      makeQR(`qr-vpn-${userId}`, vpn.connect_hint);
+    }
+    if (smb.password && ip) {
+      makeQR(`qr-smb-${userId}`, `smb://casaos:${smb.password}@${ip}/files`);
+    }
+    if (u.casaos_url) {
+      makeQR(`qr-casaos-${userId}`, u.casaos_url);
+    }
+  }
+
+  function makeQR(elId, text) {
+    const el = document.getElementById(elId);
+    if (!el || el.dataset.generated) return;
+    el.dataset.generated = '1';
+    new QRCode(el, {
+      text,
+      width: 160, height: 160,
+      colorDark: '#000000', colorLight: '#ffffff',
+      correctLevel: QRCode.CorrectLevel.M,
+    });
+  }
+
+  /* ── Delete mit Inline-Bestätigung ─────────────────────────── */
+  function askDelete(userId) {
+    const u = users.find(x => x.user_id === userId);
+    const wrap = document.getElementById(`del-wrap-${userId}`);
+    if (!wrap) return;
+    wrap.innerHTML = `
+      <div class="confirm-delete">
+        <span>${esc(u?.username || 'User')} löschen?</span>
+        <button class="btn btn-danger btn-sm" onclick="doDelete(${userId})">Ja, löschen</button>
+        <button class="btn btn-ghost btn-sm" onclick="cancelDelete(${userId})">Abbrechen</button>
+      </div>`;
+  }
+
+  function cancelDelete(userId) {
+    const wrap = document.getElementById(`del-wrap-${userId}`);
+    if (wrap) wrap.innerHTML =
+      `<button class="btn btn-danger btn-sm" onclick="askDelete(${userId})">🗑</button>`;
+  }
+
+  async function doDelete(userId) {
+    const u = users.find(x => x.user_id === userId);
+    try {
+      await apiFetch(`/admin/users/${userId}`, { method: 'DELETE' });
+      delete detailCache[userId];
+      if (pollingTimers[userId]) { clearInterval(pollingTimers[userId]); delete pollingTimers[userId]; }
+      if (expandedUser === userId) expandedUser = null;
+      toast(`User "${u?.username}" gelöscht`, 'ok');
+      await loadUsers();
+    } catch(e) {
+      toast('Löschen fehlgeschlagen: ' + e.message, 'err');
+    }
+  }
+
+  /* ── Provisioning-Polling ───────────────────────────────────── */
+  function startPolling(userId) {
+    if (pollingTimers[userId]) return;
+    pollingTimers[userId] = setInterval(async () => {
+      try {
+        const data = await apiFetch(`/admin/users/${userId}/status`);
+        // User in lokaler Liste aktualisieren
+        const idx = users.findIndex(x => x.user_id === userId);
+        if (idx >= 0) users[idx] = { ...users[idx], ...data };
+        document.getElementById('userCount').textContent = users.length;
+        renderUsers();
+
+        if (data.status === 'ready' || data.status === 'error') {
+          clearInterval(pollingTimers[userId]);
+          delete pollingTimers[userId];
+          detailCache[userId] = data;
+          if (data.status === 'ready')
+            toast(`User "${data.username}" ist bereit!`, 'ok');
+          else
+            toast(`User "${data.username}" Provisionierung fehlgeschlagen`, 'err');
+        }
+      } catch {}
+    }, 5000);
+  }
+
+  /* ── Modal ──────────────────────────────────────────────────── */
+  function openModal() {
+    document.getElementById('modal').classList.add('open');
+    setTimeout(() => document.getElementById('newUsername').focus(), 50);
+  }
+  function closeModal() {
+    document.getElementById('modal').classList.remove('open');
+    document.getElementById('newUsername').value = '';
+    document.getElementById('newQuota').value = '100G';
+    document.getElementById('createBtn').disabled = false;
+    document.getElementById('createBtn').textContent = 'Anlegen →';
+  }
+
+  async function submitCreate() {
+    const username = document.getElementById('newUsername').value.trim();
+    const quota    = document.getElementById('newQuota').value.trim() || '100G';
+    if (!username) { toast('Username fehlt', 'err'); return; }
+    if (!/^[a-z0-9_-]{2,32}$/.test(username)) {
+      toast('Username: nur a-z, 0-9, _ und - (2–32 Zeichen)', 'err'); return;
+    }
+    const btn = document.getElementById('createBtn');
+    btn.disabled = true;
+    btn.textContent = 'Anlegen…';
+    try {
+      const data = await apiFetch(
+        `/admin/users?username=${encodeURIComponent(username)}&quota=${encodeURIComponent(quota)}`,
+        { method: 'POST' }
+      );
+      closeModal();
+      toast(`User "${username}" wird provisioniert (~5–10 Min)`, 'ok');
+      await loadUsers();
+      startPolling(data.user_id);
+    } catch(e) {
+      toast('Fehler: ' + e.message, 'err');
+      btn.disabled = false;
+      btn.textContent = 'Anlegen →';
+    }
+  }
+
+  /* ── Clipboard ──────────────────────────────────────────────── */
+  async function copy(text, btn) {
+    try {
+      await navigator.clipboard.writeText(text);
+      const orig = btn.textContent;
+      btn.textContent = '✓';
+      setTimeout(() => { btn.textContent = orig; }, 1500);
+    } catch {
+      toast('Kopieren fehlgeschlagen', 'err');
+    }
+  }
+
+  /* ── Toast ──────────────────────────────────────────────────── */
+  let _toastTimer;
+  function toast(msg, type = 'ok') {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.className = `show ${type}`;
+    clearTimeout(_toastTimer);
+    _toastTimer = setTimeout(() => { el.className = ''; }, 3500);
+  }
+
+  /* ── Util ───────────────────────────────────────────────────── */
+  function esc(s) {
+    return String(s ?? '')
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+      .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  /* ── Init ───────────────────────────────────────────────────── */
+  if (adminKey) {
+    document.getElementById('keyInput').value = '••••••••';
+    login();
+  }
+</script>
+</body>
+</html>

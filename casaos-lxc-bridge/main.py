@@ -157,6 +157,11 @@ def root():
     return RedirectResponse("/static/index.html")
 
 
+@app.get("/admin", include_in_schema=False)
+def admin_ui():
+    return RedirectResponse("/static/admin.html")
+
+
 @app.get("/health")
 def health():
     return {
