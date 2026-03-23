@@ -186,7 +186,7 @@ def deprovision_user(user_id: int) -> None:
     if namespace:
         try:
             proxmox._ssh_run(
-                f"pct exec {HEADSCALE_LXC_ID} -- headscale users destroy {namespace} 2>/dev/null || true"
+                f"pct exec {HEADSCALE_LXC_ID} -- /usr/local/bin/headscale users destroy {namespace} 2>/dev/null || true"
             )
         except Exception as e:
             logger.warning(f"Headscale namespace destroy fehlgeschlagen: {e}")
@@ -291,13 +291,16 @@ def _deploy_bridge_env_in_lxc(
 
 def _setup_headscale_namespace(proxmox: ProxmoxClient, username: str) -> str:
     """Legt Headscale-Namespace + Pre-Auth-Key für den User an. Gibt Auth-Key zurück."""
+    # Vollständiger Pfad — pct exec hat /usr/local/bin nicht im PATH
+    HS = "/usr/local/bin/headscale"
+
     # Namespace anlegen (idempotent)
     proxmox._ssh_run(
-        f"pct exec {HEADSCALE_LXC_ID} -- headscale users create {username} 2>/dev/null || true"
+        f"pct exec {HEADSCALE_LXC_ID} -- {HS} users create {username} 2>/dev/null || true"
     )
     # Pre-Auth-Key generieren (reusable, kein Ablauf)
     result = proxmox._ssh_run(
-        f"pct exec {HEADSCALE_LXC_ID} -- headscale preauthkeys create "
+        f"pct exec {HEADSCALE_LXC_ID} -- {HS} preauthkeys create "
         f"--user {username} --reusable --expiration 0 --output json"
     )
     if result.returncode != 0 or not result.stdout.strip():
