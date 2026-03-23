@@ -11,6 +11,7 @@ Isolation-Design:
   - Kein Zugang zu 192.168.10.0/24 (Management-Netz, Proxmox, bestehende LXCs)
   - Nur Internet-Zugang via NAT/Masquerade über vmbr0
   - Headscale-Ausnahme: falls TAILSCALE_ENABLED, erlaubt Port 8080 nach 192.168.10.115
+  - Bridge-Store-Ausnahme: erlaubt Port 8200 nach 192.168.10.141 (CasaOS App-Store)
 """
 from __future__ import annotations
 import os
@@ -21,6 +22,8 @@ HEADSCALE_LXC_IP = os.getenv("HEADSCALE_LXC_IP", "192.168.10.115")
 HEADSCALE_PORT = int(os.getenv("HEADSCALE_PORT", "8080"))
 TAILSCALE_ENABLED = os.getenv("TAILSCALE_ENABLED", "true").lower() == "true"
 MGMT_IP_BASE = int(os.getenv("USER_MGMT_IP_BASE", "149"))
+BRIDGE_HOST_IP = os.getenv("BRIDGE_HOST_IP", "192.168.10.141")
+BRIDGE_HOST_PORT = int(os.getenv("BRIDGE_HOST_PORT", "8200"))
 
 
 def get_user_mgmt_ip(user_id: int) -> str:
@@ -70,6 +73,14 @@ def create_bridge(user_id: int, proxmox) -> str:
             f"-m comment --comment openclaw-user-{u}-headscale\n"
         )
 
+    # Bridge-Store-Ausnahme: CasaOS App-Store (immer aktiv)
+    # Insertion-Reihenfolge: bridge vor headscale → headscale überholt bridge → beide vor mgmt-DROP
+    bridge_store_line = (
+        f"            post-up   iptables -I FORWARD 1 -i {bridge} "
+        f"-d {BRIDGE_HOST_IP} -p tcp --dport {BRIDGE_HOST_PORT} -j ACCEPT "
+        f"-m comment --comment openclaw-user-{u}-bridge-store\n"
+    )
+
     mgmt_ip = get_user_mgmt_ip(u)
     casaos_ip = get_user_casaos_ip(u)
 
@@ -90,7 +101,7 @@ def create_bridge(user_id: int, proxmox) -> str:
             # Reihenfolge: iso DROP → mgmt DROP → HS-Ausnahme (jede überholt die vorherige)
             post-up   iptables -I FORWARD 1 -i {bridge} -d 10.0.0.0/8 -j DROP -m comment --comment openclaw-user-{u}-iso
             post-up   iptables -I FORWARD 1 -i {bridge} -d 192.168.10.0/24 -j DROP -m comment --comment openclaw-user-{u}-mgmt
-    """) + headscale_line + textwrap.dedent(f"""
+    """) + headscale_line + bridge_store_line + textwrap.dedent(f"""
             # Lokaler LAN-Zugang: IP-Alias + DNAT → 10.{u}.0.10
             post-up   ip addr add {mgmt_ip}/32 dev vmbr0 2>/dev/null || true
             post-up   iptables -t nat -A PREROUTING -d {mgmt_ip} -j DNAT --to-destination {casaos_ip} -m comment --comment openclaw-user-{u}-dnat

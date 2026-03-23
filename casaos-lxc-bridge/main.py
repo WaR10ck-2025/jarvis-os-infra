@@ -32,7 +32,9 @@ import textwrap
 import json
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Query, Depends
-from fastapi.responses import JSONResponse, RedirectResponse, PlainTextResponse
+import io
+import zipfile
+from fastapi.responses import JSONResponse, RedirectResponse, PlainTextResponse, Response
 from fastapi.staticfiles import StaticFiles
 import app_resolver
 import lxc_manager
@@ -117,7 +119,7 @@ async def lifespan(fastapi_app: FastAPI):
     cache_task = asyncio.create_task(_schedule_cache_refresh())
 
     # Bridge als CasaOS Custom Store registrieren (idempotent)
-    store_url = f"{BRIDGE_URL}/casaos-store"
+    store_url = f"{BRIDGE_URL}/casaos-store.zip"
     try:
         from proxmox_client import ProxmoxClient
         proxmox = ProxmoxClient()
@@ -390,7 +392,7 @@ async def casaos_store_index():
 async def casaos_store_app(app_id: str):
     """
     Liefert CasaOS-kompatibles docker-compose.yml (mit x-casaos Block).
-    Für Umbrel-Apps wird ein synthetischer x-casaos Block generiert.
+    Für Umbrel-Apps wird ein synthetischen x-casaos Block generiert.
     """
     try:
         meta = await asyncio.to_thread(app_resolver.resolve, app_id)
@@ -399,6 +401,38 @@ async def casaos_store_app(app_id: str):
 
     compose = _to_casaos_format(meta)
     return PlainTextResponse(compose, media_type="text/plain")
+
+
+@app.get("/casaos-store.zip")
+async def casaos_store_zip():
+    """
+    GitHub-Archive-kompatibler ZIP-Download des Custom Stores.
+    CasaOS v0.4.15+ erwartet eine ZIP-URL beim Registrieren von Custom Stores.
+    Struktur: casaos-store/Apps/{app_id}/docker-compose.yml
+    """
+    apps = _catalog_cache["apps"]
+    if not apps:
+        apps = await asyncio.to_thread(app_resolver.list_all_apps_with_meta)
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        for app_entry in apps:
+            app_id = app_entry.get("app_id")
+            if not app_id:
+                continue
+            try:
+                meta = await asyncio.to_thread(app_resolver.resolve, app_id)
+                compose = _to_casaos_format(meta)
+                zf.writestr(f"casaos-store/Apps/{app_id}/docker-compose.yml", compose)
+            except Exception:
+                continue
+
+    buf.seek(0)
+    return Response(
+        content=buf.read(),
+        media_type="application/zip",
+        headers={"Content-Disposition": "attachment; filename=casaos-store.zip"},
+    )
 
 
 # ---------------------------------------------------------------------------

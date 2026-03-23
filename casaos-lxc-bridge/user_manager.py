@@ -127,6 +127,18 @@ def provision_user(username: str, quota: str = "100G") -> dict:
         proxmox.start_lxc(casaos_lxc_id)
         proxmox.wait_for_lxc_ready(casaos_lxc_id, timeout=120)
 
+        # OpenClaw App-Store in User-CasaOS registrieren
+        # Retry-Loop: CasaOS-Dienste brauchen etwas Zeit nach dem Start
+        try:
+            proxmox.exec_in_lxc(casaos_lxc_id,
+                f"for i in $(seq 1 12); do "
+                f"  casaos-cli app-management register app-store {BRIDGE_URL}/casaos-store.zip "
+                f"  2>/dev/null && break || sleep 5; "
+                f"done"
+            )
+        except Exception as e:
+            logger.warning(f"App-Store-Registrierung fehlgeschlagen (nicht kritisch): {e}")
+
         # Schritt 7: Bridge-Env in LXC deployen (docker compose up)
         _set_step(conn, user_id, "deploying_bridge_env")
         _deploy_bridge_env_in_lxc(proxmox, casaos_lxc_id, user_id, username, api_key)
