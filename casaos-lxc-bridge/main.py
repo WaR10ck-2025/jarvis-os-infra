@@ -57,9 +57,27 @@ _store_zip_cache: dict = {"zip_bytes": b"", "last_update": 0.0}
 _CACHE_TTL = 6 * 3600   # 6 Stunden
 
 
+def _is_casaos_compatible(compose_yaml: str) -> bool:
+    """
+    Prüft ob ein Compose-File CasaOS-kompatibel ist.
+    Umbrel-Apps verwenden app_proxy ohne Image → scheitern an CasaOS-Validierung.
+    """
+    if "app_proxy:" not in compose_yaml:
+        return True
+    # app_proxy-Service hat kein eigenes Image → Umbrel-Pattern, nicht CasaOS-kompatibel
+    proxy_section = compose_yaml.split("app_proxy:")[1]
+    next_service = proxy_section.find("\n  ") if "\n  " in proxy_section else len(proxy_section)
+    return "image:" in proxy_section[:next_service]
+
+
 def _build_store_zip_sync(apps: list) -> bytes:
-    """Baut den Store-ZIP synchron im Memory. Für asyncio.to_thread()."""
+    """
+    Baut den Store-ZIP synchron im Memory. Für asyncio.to_thread().
+    Schließt Umbrel-Apps mit app_proxy-Service aus (CasaOS-inkompatibel).
+    """
     buf = io.BytesIO()
+    included = 0
+    skipped = 0
     with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as zf:
         for app_entry in apps:
             app_id = app_entry.get("app_id")
@@ -68,9 +86,14 @@ def _build_store_zip_sync(apps: list) -> bytes:
             try:
                 meta = app_resolver.resolve(app_id)
                 compose = _to_casaos_format(meta)
+                if not _is_casaos_compatible(compose):
+                    skipped += 1
+                    continue
                 zf.writestr(f"casaos-store/Apps/{app_id}/docker-compose.yml", compose)
+                included += 1
             except Exception:
-                continue
+                skipped += 1
+    logger.info(f"Store-ZIP: {included} Apps eingeschlossen, {skipped} übersprungen")
     return buf.getvalue()
 
 
