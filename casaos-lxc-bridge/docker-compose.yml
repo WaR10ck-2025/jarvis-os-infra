@@ -51,6 +51,10 @@ services:
       - WEBAUTHN_RP_ID=${WEBAUTHN_RP_ID:-localhost}
       - WEBAUTHN_RP_NAME=${WEBAUTHN_RP_NAME:-OpenClaw Admin}
       - WEBAUTHN_ENABLED=${WEBAUTHN_ENABLED:-false}
+      # Authentik OIDC Admin-Dashboard Login
+      - OIDC_CLIENT_ID=${OIDC_CLIENT_ID:-}
+      - OIDC_CLIENT_SECRET=${OIDC_CLIENT_SECRET:-}
+      - OIDC_ISSUER=${OIDC_ISSUER:-}
     volumes:
       - bridge-data:/data
       - /root/.ssh/proxmox_key:/app/proxmox_key:ro

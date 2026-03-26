@@ -796,3 +796,141 @@ async def admin_deny_request(
     if result.rowcount == 0:
         raise HTTPException(404, detail="Anfrage nicht gefunden oder bereits bearbeitet")
     return {"success": True, "request_id": request_id}
+
+
+# ---------------------------------------------------------------------------
+# OIDC / Authentik SSO — Admin-Dashboard Login
+# ---------------------------------------------------------------------------
+import urllib.parse as _urlparse
+import urllib.request as _urlreq
+import urllib.error as _urlerr
+
+OIDC_CLIENT_ID     = os.getenv("OIDC_CLIENT_ID", "")
+OIDC_CLIENT_SECRET = os.getenv("OIDC_CLIENT_SECRET", "")
+OIDC_ISSUER        = os.getenv("OIDC_ISSUER", "")   # z.B. http://192.168.10.125:9000/application/o/openclaw-admin/
+
+# Authentik-Base aus Issuer ableiten (alles vor /application/o/)
+_authentik_base = OIDC_ISSUER.split("/application/o/")[0] if "/application/o/" in OIDC_ISSUER else ""
+_OIDC_AUTH_URL   = f"{_authentik_base}/application/o/authorize/"
+_OIDC_TOKEN_URL  = f"{_authentik_base}/application/o/token/"
+
+# CSRF-State-Store (kurzlebig, 10 Minuten)
+_oidc_states: dict[str, float] = {}   # state → expires_ts
+
+
+@app.get("/auth/login")
+async def auth_login():
+    """Startet den OIDC-Login-Flow → redirect zu Authentik."""
+    if not OIDC_CLIENT_ID or not _authentik_base:
+        raise HTTPException(501, detail="OIDC nicht konfiguriert (OIDC_CLIENT_ID fehlt)")
+    import secrets as _sec
+    state = _sec.token_urlsafe(24)
+    _oidc_states[state] = time.time() + 600   # 10 min gültig
+    params = _urlparse.urlencode({
+        "response_type": "code",
+        "client_id":     OIDC_CLIENT_ID,
+        "redirect_uri":  f"{BRIDGE_URL}/auth/callback",
+        "scope":         "openid email profile",
+        "state":         state,
+    })
+    return RedirectResponse(f"{_OIDC_AUTH_URL}?{params}")
+
+
+@app.get("/auth/callback")
+async def auth_callback(request: Request, code: str = Query(...), state: str = Query(...)):
+    """OIDC-Callback: tauscht Code gegen Token, setzt Session-Cookie."""
+    # CSRF-State validieren
+    expires = _oidc_states.pop(state, None)
+    if not expires or time.time() > expires:
+        raise HTTPException(400, detail="Ungültiger oder abgelaufener OIDC-State")
+
+    # Code gegen Token tauschen
+    token_body = _urlparse.urlencode({
+        "grant_type":    "authorization_code",
+        "code":          code,
+        "redirect_uri":  f"{BRIDGE_URL}/auth/callback",
+        "client_id":     OIDC_CLIENT_ID,
+        "client_secret": OIDC_CLIENT_SECRET,
+    }).encode()
+    req = _urlreq.Request(
+        _OIDC_TOKEN_URL,
+        data=token_body,
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+    )
+    try:
+        with _urlreq.urlopen(req, timeout=10) as resp:
+            tokens = json.loads(resp.read())
+    except _urlerr.HTTPError as e:
+        raise HTTPException(502, detail=f"Token-Exchange fehlgeschlagen: {e.code}")
+
+    access_token = tokens.get("access_token", "")
+    if not access_token:
+        raise HTTPException(502, detail="Kein access_token erhalten")
+
+    # Username aus Userinfo holen
+    ui_req = _urlreq.Request(
+        f"{_authentik_base}/application/o/userinfo/",
+        headers={"Authorization": f"Bearer {access_token}"},
+    )
+    try:
+        with _urlreq.urlopen(ui_req, timeout=10) as resp:
+            userinfo = json.loads(resp.read())
+    except Exception:
+        raise HTTPException(502, detail="Userinfo-Endpoint nicht erreichbar")
+
+    username = userinfo.get("preferred_username") or userinfo.get("sub", "unknown")
+
+    # Admin-Status prüfen: akadmin ODER in openclaw-admins Gruppe
+    is_admin = False
+    try:
+        import authentik_client as _ak
+        if _ak._enabled():
+            result = _ak._request("GET", f"/core/users/?username={_urlparse.quote(username)}")
+            users_list = result.get("results", [])
+            if users_list:
+                user_pk = users_list[0]["pk"]
+                groups  = _ak._request("GET", f"/core/users/{user_pk}/")
+                user_groups = [g.get("name", "") for g in groups.get("groups_obj", [])]
+                is_admin = username == "akadmin" or "openclaw-admins" in user_groups
+    except Exception:
+        # Fallback: nur akadmin darf rein
+        is_admin = (username == "akadmin")
+
+    if not is_admin:
+        raise HTTPException(403, detail=f"User '{username}' hat keine Admin-Rechte")
+
+    # Session anlegen + Cookie setzen
+    from auth import create_oidc_session
+    sid = create_oidc_session(username, is_admin=True)
+    response = RedirectResponse("/static/admin.html", status_code=302)
+    response.set_cookie(
+        "oidc_session", sid,
+        httponly=True, samesite="lax", max_age=8 * 3600,
+    )
+    logger.info(f"OIDC Login: '{username}' → Session {sid[:8]}…")
+    return response
+
+
+@app.get("/auth/me")
+async def auth_me(request: Request):
+    """Gibt aktuelle OIDC-Session-Info zurück (für JS-Auth-Check)."""
+    from auth import get_oidc_session
+    sid = request.cookies.get("oidc_session")
+    if not sid:
+        return {"authenticated": False}
+    s = get_oidc_session(sid)
+    if not s:
+        return {"authenticated": False}
+    return {"authenticated": True, "username": s["username"], "is_admin": s["is_admin"]}
+
+
+@app.get("/auth/logout")
+async def auth_logout(request: Request):
+    """Löscht OIDC-Session und leitet zur Admin-Seite zurück."""
+    from auth import delete_oidc_session
+    sid = request.cookies.get("oidc_session")
+    if sid:
+        delete_oidc_session(sid)
+    response = RedirectResponse("/static/admin.html", status_code=302)
+    response.delete_cookie("oidc_session")
+    return response
