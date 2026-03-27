@@ -83,7 +83,7 @@ fi
 echo "  → rclone prüfen..."
 if ! command -v rclone &>/dev/null; then
   echo "    → rclone installieren..."
-  curl -fsSL https://rclone.org/install.sh | bash -s -- --no-sudo 2>/dev/null
+  curl -fsSL https://rclone.org/install.sh | bash 2>/dev/null
   echo "  ✓ rclone $(rclone --version 2>/dev/null | head -1) installiert"
 else
   echo "  ✓ rclone bereits vorhanden ($(rclone --version 2>/dev/null | head -1 | cut -d' ' -f2))"

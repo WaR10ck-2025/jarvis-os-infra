@@ -206,7 +206,7 @@ if [ -z "$AGE_PUBKEY" ]; then
   ENCRYPTED="${TEMP_DIR}/${BACKUP_NAME}.tar.gz"
   SKIP_GITHUB=true
 else
-  age --encrypt --recipient "$AGE_PUBKEY" "$ARCHIVE" -o "$ENCRYPTED"
+  age --encrypt --recipient "$AGE_PUBKEY" -o "$ENCRYPTED" "$ARCHIVE"
   rm -f "$ARCHIVE"
   log_ok "Verschlüsselt: $(basename "$ENCRYPTED")"
   SKIP_GITHUB=false
