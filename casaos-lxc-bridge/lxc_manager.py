@@ -27,6 +27,7 @@ class AppRecord:
     hostname: str
     port: int
     status: str   # installing | running | stopped | error
+    user_id: int = 0
 
 
 def _get_db() -> sqlite3.Connection:

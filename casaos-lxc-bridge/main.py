@@ -869,7 +869,7 @@ async def auth_callback(request: Request, code: str = Query(...), state: str = Q
 
     # Username aus Userinfo holen
     ui_req = _urlreq.Request(
-        f"{_authentik_base}/application/o/userinfo/",
+        f"{OIDC_ISSUER.rstrip('/')}/userinfo/",
         headers={"Authorization": f"Bearer {access_token}"},
     )
     try:
