@@ -869,14 +869,17 @@ async def auth_callback(request: Request, code: str = Query(...), state: str = Q
 
     # Username aus Userinfo holen
     ui_req = _urlreq.Request(
-        f"{OIDC_ISSUER.rstrip('/')}/userinfo/",
+        f"{_authentik_base}/application/o/userinfo/",
         headers={"Authorization": f"Bearer {access_token}"},
     )
     try:
         with _urlreq.urlopen(ui_req, timeout=10) as resp:
             userinfo = json.loads(resp.read())
-    except Exception:
-        raise HTTPException(502, detail="Userinfo-Endpoint nicht erreichbar")
+    except _urlerr.HTTPError as e:
+        body = e.read().decode(errors="replace")
+        raise HTTPException(502, detail=f"Userinfo HTTP {e.code}: {body[:200]}")
+    except Exception as e:
+        raise HTTPException(502, detail=f"Userinfo-Fehler: {type(e).__name__}: {e}")
 
     username = userinfo.get("preferred_username") or userinfo.get("sub", "unknown")
 
