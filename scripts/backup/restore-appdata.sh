@@ -218,12 +218,12 @@ restore_headscale() {
     log_ok "Headscale Config + Keys wiederhergestellt"
   fi
 
-  # SQLite DB
+  # SQLite DB (liegt in /etc/headscale/)
   local DB_FILE
   DB_FILE=$(find "${BACKUP_DIR}/headscale" -name "headscale-*.sqlite" 2>/dev/null | sort -r | head -1)
   if [ -f "$DB_FILE" ]; then
     pct exec "$LXC" -- bash -c "systemctl stop headscale 2>/dev/null || true"
-    pct push "$LXC" "$DB_FILE" "/var/lib/headscale/db.sqlite"
+    pct push "$LXC" "$DB_FILE" "/etc/headscale/db.sqlite"
     pct exec "$LXC" -- bash -c "systemctl start headscale 2>/dev/null || true"
     log_ok "Headscale DB wiederhergestellt"
   fi

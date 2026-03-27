@@ -88,7 +88,7 @@ fi
 
 # ── Proxmox Storage registrieren (falls noch nicht vorhanden) ────────────────
 STORAGE_PATH="${ACTIVE_BASE_DIR}"
-if ! pvesm list 2>/dev/null | grep -q "^$ACTIVE_STORAGE"; then
+if ! pvesm status 2>/dev/null | grep -q "$ACTIVE_STORAGE"; then
   log "  → Proxmox-Storage '$ACTIVE_STORAGE' registrieren..."
   pvesm add dir "$ACTIVE_STORAGE" --path "$STORAGE_PATH" --content backup --shared 0
   log_ok "Proxmox-Storage '$ACTIVE_STORAGE' registriert"
@@ -117,9 +117,9 @@ dump_lxc() {
     --quiet 1 \
     2>>"$LOG_FILE"; then
     local duration=$((SECONDS - start_time))
-    # Größe der neuesten Backup-Datei ermitteln
+    # Größe der neuesten Backup-Datei ermitteln (LXC=.tar.zst)
     local backup_file
-    backup_file=$(find "${ACTIVE_BASE_DIR}/dump" -name "vzdump-lxc-${lxc_id}-*.vma.zst" \
+    backup_file=$(find "${ACTIVE_BASE_DIR}/dump" -name "vzdump-lxc-${lxc_id}-*.tar.zst" \
       -newer /tmp/.vzdump_marker 2>/dev/null | sort -r | head -1)
     local size="?"
     [ -n "$backup_file" ] && size=$(du -sh "$backup_file" 2>/dev/null | cut -f1)
@@ -191,7 +191,7 @@ fi
 # ── Checksum-Manifest ─────────────────────────────────────────────────────────
 log "  → SHA256-Manifest erstellen..."
 MANIFEST="${ACTIVE_BASE_DIR}/dump/manifest-${DATE_DIR}.sha256"
-find "${ACTIVE_BASE_DIR}/dump" -name "*.vma.zst" -newer /tmp/.vzdump_marker \
+find "${ACTIVE_BASE_DIR}/dump" -name "*.zst" -newer /tmp/.vzdump_marker \
   -exec sha256sum {} \; > "$MANIFEST" 2>/dev/null || true
 MANIFEST_ENTRIES=$(wc -l < "$MANIFEST" 2>/dev/null || echo 0)
 log_ok "Manifest: $MANIFEST_ENTRIES Einträge → $(basename "$MANIFEST")"
@@ -201,14 +201,15 @@ log "  → Retention: letzte $RETENTION_VZDUMP_COUNT Versionen pro LXC..."
 DUMP_DIR="${ACTIVE_BASE_DIR}/dump"
 # Für jeden LXC/VM: alle außer den neuesten N Backups löschen
 for VMTYPE in lxc qemu; do
-  for VMID_DIR in $(find "$DUMP_DIR" -name "vzdump-${VMTYPE}-*-*.vma.zst" \
+  EXT="tar.zst"; [ "$VMTYPE" = "qemu" ] && EXT="vma.zst"
+  for VMID_DIR in $(find "$DUMP_DIR" -name "vzdump-${VMTYPE}-*-*.${EXT}" \
       | sed 's/.*vzdump-[a-z]*-\([0-9]*\)-.*/\1/' | sort -u 2>/dev/null); do
-    BACKUPS=$(ls -t "${DUMP_DIR}/vzdump-${VMTYPE}-${VMID_DIR}-"*.vma.zst 2>/dev/null)
+    BACKUPS=$(ls -t "${DUMP_DIR}/vzdump-${VMTYPE}-${VMID_DIR}-"*.${EXT} 2>/dev/null)
     COUNT=$(echo "$BACKUPS" | wc -l)
     if [ "$COUNT" -gt "$RETENTION_VZDUMP_COUNT" ]; then
       echo "$BACKUPS" | tail -n "+$((RETENTION_VZDUMP_COUNT + 1))" | while read -r OLD_FILE; do
         rm -f "$OLD_FILE"
-        rm -f "${OLD_FILE%.vma.zst}.log"
+        rm -f "${OLD_FILE%.${EXT}}.log"
         log_ok "Retention: $(basename "$OLD_FILE") gelöscht"
       done
     fi

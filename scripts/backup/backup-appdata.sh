@@ -191,9 +191,9 @@ backup_headscale() {
     return
   fi
 
-  # SQLite DB sichern
+  # SQLite DB sichern (liegt in /etc/headscale/)
   run_in_lxc "$LXC" "
-    sqlite3 /var/lib/headscale/db.sqlite \".backup /tmp/headscale-${DATE_DIR}.sqlite\" 2>/dev/null || true
+    sqlite3 /etc/headscale/db.sqlite \".backup /tmp/headscale-${DATE_DIR}.sqlite\" 2>/dev/null || true
   "
   if pct exec "$LXC" -- bash -c "test -f /tmp/headscale-${DATE_DIR}.sqlite" 2>/dev/null; then
     pct pull "$LXC" "/tmp/headscale-${DATE_DIR}.sqlite" \
@@ -202,11 +202,10 @@ backup_headscale() {
     log_ok "Headscale DB gesichert"
   fi
 
-  # Config + Private Key
+  # Config + Private Keys (alles in /etc/headscale/)
   run_in_lxc "$LXC" "
     tar -czf /tmp/headscale-config-${DATE_DIR}.tar.gz \
       /etc/headscale/ \
-      /var/lib/headscale/private.key \
       2>/dev/null
   " && {
     pct pull "$LXC" "/tmp/headscale-config-${DATE_DIR}.tar.gz" \
