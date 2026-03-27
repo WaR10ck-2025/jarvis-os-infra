@@ -50,6 +50,21 @@ BRIDGE_URL = os.getenv("BRIDGE_URL", "http://192.168.10.141:8200")
 # "casaos" = CasaOS-LXC (Template 9001) | "ugos" = UGOS-VM (Template 9002)
 USER_DASHBOARD = os.getenv("USER_DASHBOARD", "casaos")
 
+# Template-IDs reservieren: user_id * 1000 darf nicht in diesen Bereich fallen
+_RESERVED_VM_IDS: set[int] = {
+    int(os.getenv("PROXMOX_TEMPLATE_ID", "9000")),
+    int(os.getenv("CASAOS_TEMPLATE_ID", "9001")),
+    int(os.getenv("UGOS_TEMPLATE_ID", "9002")),
+}
+
+
+def _safe_vm_id(base_id: int) -> int:
+    """Verschiebt vm_id um +1000, falls sie mit einer Template-ID kollidiert."""
+    vm_id = base_id
+    while vm_id in _RESERVED_VM_IDS:
+        vm_id += 1000
+    return vm_id
+
 
 def _set_step(conn, user_id: int, step: str) -> None:
     conn.execute("UPDATE users SET provisioning_step=? WHERE user_id=?", (step, user_id))
@@ -86,7 +101,7 @@ def provision_user(username: str, quota: str = "100G",
     # Netzwerk-Parameter berechnen
     subnet, gateway, bridge = get_user_network(user_id)
     casaos_ip = get_user_casaos_ip(user_id)
-    casaos_lxc_id = user_id * 1000
+    casaos_lxc_id = _safe_vm_id(user_id * 1000)
     range_start = casaos_lxc_id
     range_end = casaos_lxc_id + USER_LXC_RANGE_SIZE - 1
 
