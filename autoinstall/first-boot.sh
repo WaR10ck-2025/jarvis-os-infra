@@ -256,8 +256,8 @@ if ! pvesm status 2>/dev/null | grep -q "^local-lvm"; then
 else
   log "  Storage: local-lvm erkannt"
 fi
-# STORAGE in allen LXC-Scripts setzen
-sed -i "s|STORAGE=\"local-lvm\"|STORAGE=\"$LXC_STORAGE\"|g" "$SCRIPTS"/install-lxc-*.sh
+# STORAGE als Umgebungsvariable exportieren (install-lxc-*.sh nutzen ${STORAGE:-local-zfs})
+export STORAGE="$LXC_STORAGE"
 log "✓ Storage konfiguriert: $LXC_STORAGE"
 
 # ── Schritt 5: Basis-LXCs anlegen (parallel) ──────────────────────────────
