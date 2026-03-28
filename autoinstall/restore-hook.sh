@@ -36,14 +36,36 @@ log_section() {
 
 RESTORE_ERRORS=0
 
-# ── Phase 1: USB mounten ──────────────────────────────────────────────────
-log_section "Phase 1: OPENCLAW-BAK USB mounten"
+# ── Phase 1: USB mounten (2-stufige Erkennung) ────────────────────────────
+log_section "Phase 1: Backup-USB mounten"
 mkdir -p "$USB_MOUNT"
-USB_DEV=$(blkid -L "$USB_LABEL" 2>/dev/null || true)
+
+# Stufe 1: Dedizierte OPENCLAW-BAK Partition (Modus A / Ventoy Modus C)
+USB_DEV=$(blkid -L "OPENCLAW-BAK" 2>/dev/null || true)
+if [ -n "$USB_DEV" ]; then
+  log "  Stufe 1: OPENCLAW-BAK Partition gefunden: $USB_DEV"
+else
+  # Stufe 2: Ventoy-Partition mit openclaw-backups/ Unterordner (Modus B)
+  log "  Stufe 1: kein OPENCLAW-BAK — suche Ventoy-Partition..."
+  VENTOY_DEV=$(blkid -L "Ventoy" 2>/dev/null || true)
+  if [ -n "$VENTOY_DEV" ]; then
+    mountpoint -q "$USB_MOUNT" || mount "$VENTOY_DEV" "$USB_MOUNT" 2>/dev/null || true
+    if [ -d "${USB_MOUNT}/openclaw-backups/dump" ]; then
+      USB_DEV="$VENTOY_DEV"
+      log "  Stufe 2: Ventoy-Partition mit openclaw-backups/ gefunden: $USB_DEV"
+    else
+      umount "$USB_MOUNT" 2>/dev/null || true
+      log_err "Ventoy gefunden aber kein openclaw-backups/dump/ — Restore abgebrochen"
+      exit 1
+    fi
+  fi
+fi
+
 if [ -z "$USB_DEV" ]; then
-  log_err "OPENCLAW-BAK USB nicht gefunden — Restore abgebrochen"
+  log_err "Kein Backup-USB gefunden (weder OPENCLAW-BAK noch Ventoy+openclaw-backups/) — Restore abgebrochen"
   exit 1
 fi
+
 mountpoint -q "$USB_MOUNT" || mount "$USB_DEV" "$USB_MOUNT"
 log_ok "USB gemountet: $USB_DEV → $USB_MOUNT"
 log "  Inhalte: $(du -sh "${BACKUP_BASE}" 2>/dev/null | cut -f1) gesamt"
