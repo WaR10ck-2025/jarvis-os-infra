@@ -251,20 +251,51 @@ class ProxmoxClient:
             raise RuntimeError(f"qm guest exec VM {vm_id} fehlgeschlagen: {result.stderr}")
         return result.stdout
 
-    def wait_for_vm_ready(self, vm_id: int, timeout: int = 300) -> None:
+    def wait_for_vm_ready(
+        self,
+        vm_id: int,
+        timeout: int = 300,
+        check_ip: str | None = None,
+        check_port: int = 80,
+        boot_wait: int = 90,
+    ) -> None:
         """
-        Wartet bis VM läuft UND QEMU Guest Agent antwortet.
-        Polls get_vm_status() + prüft ob guest exec möglich ist.
+        Wartet bis VM läuft und bereit ist.
+
+        Strategie (in Reihenfolge):
+        1. Warten bis VM status=running (max timeout Sekunden).
+        2. Wenn check_ip angegeben: TCP-Verbindungscheck auf check_ip:check_port
+           (z.B. UGOS Web-UI Port 80) — gibt zurück sobald Verbindung klappt.
+        3. Sonst: kurzer Guest-Agent-Check (max 30s) — bei Erfolg früh zurück.
+        4. Fallback: fixer boot_wait (Standard 90s) damit das OS Zeit hat zu booten.
+           Kein Fehler — VM ist running, der Dienst braucht einfach Anlaufzeit.
         """
-        import time
+        import time, socket
+
         # Schritt 1: Warten bis VM status=running
         for _ in range(timeout):
             if self.get_vm_status(vm_id) == "running":
                 break
             time.sleep(1)
+        else:
+            raise TimeoutError(f"VM {vm_id}: startet nicht nach {timeout}s")
 
-        # Schritt 2: Warten bis Guest Agent antwortet (max 3 Minuten)
-        for _ in range(180):
+        # Schritt 2: TCP-Port-Check (z.B. UGOS Port 80)
+        if check_ip:
+            deadline = time.monotonic() + 300  # max 5 Minuten
+            while time.monotonic() < deadline:
+                try:
+                    s = socket.create_connection((check_ip, check_port), timeout=3)
+                    s.close()
+                    return
+                except (OSError, socket.timeout):
+                    pass
+                time.sleep(5)
+            # Timeout beim Port-Check — kein Fehler, UGOS braucht ggf. manuelle Setup
+            return
+
+        # Schritt 3: Guest-Agent-Check (kurz, optional)
+        for _ in range(15):
             try:
                 result = self._ssh_run(
                     f"qm guest exec {vm_id} --sync -- echo ok 2>/dev/null"
@@ -274,7 +305,9 @@ class ProxmoxClient:
             except Exception:
                 pass
             time.sleep(2)
-        raise TimeoutError(f"VM {vm_id}: QEMU Guest Agent nicht erreichbar nach {timeout}s")
+
+        # Schritt 4: Fixer Boot-Wait als Fallback (kein Fehler)
+        time.sleep(boot_wait)
 
     def push_file_to_lxc(self, lxc_id: int, content: str, remote_path: str) -> None:
         """Überträgt Datei-Inhalt in den LXC via pct push (Shell-sicher via base64)."""
