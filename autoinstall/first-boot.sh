@@ -239,6 +239,7 @@ if [ "$SELECTED_MODE" = "restore" ]; then
     log "  Gesucht: /root/openclaw-restore-hook.sh"
     log_remote "FEHLER: restore-hook.sh nicht gefunden!"
     log_remote_dump "FAILED"
+    pvebanner 2>/dev/null || true
     systemctl start getty@tty1.service 2>/dev/null || true
     exit 1
   fi
@@ -250,7 +251,8 @@ if [ "$SELECTED_MODE" = "restore" ]; then
   tty_write ""
   log "✓ Disaster Recovery abgeschlossen. Flag: $DONE_FLAG"
   log_remote_dump "RESTORE OK"
-  # getty erst jetzt starten — User sieht alle Status-Meldungen
+  # Login-Banner mit aktueller IP aktualisieren + getty starten
+  pvebanner 2>/dev/null || true
   systemctl start getty@tty1.service 2>/dev/null || true
   exit 0
 fi
@@ -415,7 +417,8 @@ log ""
 log "Optional -- Verschluesselten ZFS Datenpool anlegen:"
 log "  bash $REPO_DIR/autoinstall/zfs-pool-create.sh"
 
-# getty auf tty1 wieder starten (Login-Prompt nach Setup)
+# Login-Banner mit aktueller IP aktualisieren + getty starten
+pvebanner 2>/dev/null || true
 systemctl start getty@tty1.service 2>/dev/null || true
 
 # Fertig — nie wieder starten
