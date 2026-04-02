@@ -17,11 +17,11 @@ country = "de"
 fqdn = "openclaw.local"
 mailto = "Elias.Boos.000@gmail.com"
 timezone = "Europe/Berlin"
-root_password = "openclaw2024!"
+root_password = "test1234567890"
 reboot_on_error = false
 
-# Optional: SSH Public Key für passwortlosen Login
-# root_ssh_keys = ["ssh-ed25519 AAAA... user@host"]
+# SSH Public Key für passwortlosen Login nach Install
+root_ssh_keys = ["ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFJXGAWxULzXOcDIJonXl2BjKkdAY+wwDMsEhjGu7mJg war10ck@WaR10ck-11"]
 
 [network]
 # DHCP — IP wird vom Router vergeben

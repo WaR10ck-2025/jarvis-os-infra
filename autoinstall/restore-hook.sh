@@ -189,16 +189,19 @@ else
   log_ok "Storage 'openclaw-backup-usb' bereits vorhanden"
 fi
 
-# Ziel-Storage für Restore (wohin die Disk-Images gehen)
-LXC_STORAGE="local-lvm"
-if pvesm status 2>/dev/null | grep -q "^local-zfs"; then
+# Ziel-Storage für Restore (wohin die Disk-Images/rootdirs gehen)
+# Reihenfolge: local-lvm (Standard) > local-zfs > local (nur Fallback)
+# WICHTIG: "local" (dir) unterstützt KEINE Container-rootdirs!
+#          Nur local-lvm (lvmthin) oder local-zfs (zfspool) können rootdir speichern.
+if pvesm status 2>/dev/null | grep -q "^local-lvm"; then
+  LXC_STORAGE="local-lvm"
+  log "  Restore-Ziel: local-lvm"
+elif pvesm status 2>/dev/null | grep -q "^local-zfs"; then
   LXC_STORAGE="local-zfs"
   log "  Restore-Ziel: local-zfs"
-elif pvesm status 2>/dev/null | grep -q "^local "; then
-  LXC_STORAGE="local"
-  log "  Restore-Ziel: local"
 else
-  log "  Restore-Ziel: local-lvm"
+  LXC_STORAGE="local"
+  log "  ⚠ Restore-Ziel: local (dir) — Container-Restore könnte fehlschlagen!"
 fi
 
 DUMP_DIR="${BACKUP_BASE}/dump"

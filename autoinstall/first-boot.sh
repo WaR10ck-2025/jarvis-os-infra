@@ -21,11 +21,52 @@ REPO_DIR="/opt/openclaw-proxmox"
 SCRIPTS="$REPO_DIR/scripts"
 TEMPLATE="debian-12-standard_12.12-1_amd64.tar.zst"
 
+# Remote-Logging via ntfy.sh (kostenlos, kein Setup, kein Account)
+NTFY_TOPIC="openclaw-first-boot-$(cat /etc/machine-id 2>/dev/null | head -c 8 || echo 'default')"
+NTFY_URL="https://ntfy.sh/${NTFY_TOPIC}"
+
 # Logging-Helper
 log() { echo "[$(date '+%H:%M:%S')] $*" | tee -a "$LOG_FILE"; }
 log_section() { log ""; log "══════════════════════════════════════════════"; log "  $*"; log "══════════════════════════════════════════════"; }
 
+# Remote-Log: schickt jede Zeile an ntfy.sh (non-blocking, Fehler ignoriert)
+log_remote() {
+  local msg="$*"
+  log "$msg"
+  curl -s -d "$msg" "$NTFY_URL" >/dev/null 2>&1 &
+}
+# Sammel-Push: komplettes Logfile am Ende senden
+log_remote_dump() {
+  local status="${1:-done}"
+  curl -s \
+    -H "Title: OpenClaw First-Boot: ${status}" \
+    -H "Priority: high" \
+    -d "$(tail -100 "$LOG_FILE")" \
+    "$NTFY_URL" >/dev/null 2>&1 || true
+}
+
+# TTY fuer interaktive Ausgabe (Modus A: --on-first-boot hat kein TTY)
+TTY_DEV="/dev/tty1"
+tty_write() { echo "$*" | tee -a "$LOG_FILE" > "$TTY_DEV" 2>/dev/null || log "$*"; }
+tty_read() {
+  local secs=$1
+  # Terminal in sauberen Zustand versetzen (nach getty-Stop)
+  stty sane < "$TTY_DEV" 2>/dev/null || true
+  # timeout + head statt read -t (read -t funktioniert nicht mit Device-File-Redirect)
+  timeout "$secs" head -n1 < "$TTY_DEV" 2>/dev/null || true
+}
+
+# getty auf tty1 stoppen (sonst frisst es unsere Eingabe als Login-Versuch)
+systemctl stop getty@tty1.service 2>/dev/null || true
+# Terminal zuruecksetzen und leeren
+stty sane < "$TTY_DEV" 2>/dev/null || true
+echo -e "\033c" > "$TTY_DEV" 2>/dev/null || true
+
+# Bei Fehler/Crash: Log automatisch an ntfy senden
+trap 'log_remote_dump "CRASHED (exit $?)"' ERR
+
 log_section "OpenClaw First-Boot Setup startet"
+log_remote "=== FIRST-BOOT GESTARTET === Topic: $NTFY_TOPIC | $(hostname) | $(ip -4 addr show | grep -oP '(?<=inet\s)\d+(\.\d+){3}' | grep -v 127 | head -1 || echo 'keine IP')"
 
 # ── Schritt 1: Warten bis Netzwerk bereit ─────────────────────────────────
 log "Warte auf Netzwerkverbindung..."
@@ -38,7 +79,42 @@ for i in $(seq 1 30); do
   sleep 2
 done
 
-# ── Schritt 1b: BOOT-MENÜ (Restore vs. Fresh-Install) ───────────────────────
+# ── Schritt 1b: APT Repos fixen + Basis-Pakete (VOR Menü — restore-hook.sh braucht Repo)
+log_section "APT Repos konfigurieren"
+tty_write "  APT Repos konfigurieren..."
+# Enterprise-Repos deaktivieren (kein Abo → 401 Fehler bei apt-get update)
+for f in /etc/apt/sources.list.d/pve-enterprise.sources \
+          /etc/apt/sources.list.d/ceph.sources; do
+  if [ -f "$f" ] && ! grep -q "^Enabled: no" "$f"; then
+    echo "Enabled: no" >> "$f"
+    log "  Deaktiviert: $f"
+  fi
+done
+# No-Subscription Repo hinzufügen falls nicht vorhanden
+if [ ! -f /etc/apt/sources.list.d/pve-no-subscription.list ]; then
+  echo "deb http://download.proxmox.com/debian/pve trixie pve-no-subscription" \
+    > /etc/apt/sources.list.d/pve-no-subscription.list
+  log "  No-Subscription Repo hinzugefügt"
+fi
+log "✓ APT Repos konfiguriert"
+
+log_section "Basis-Pakete installieren"
+tty_write "  Pakete installieren (git, curl)..."
+apt-get update -qq
+apt-get install -y -qq git curl
+log "✓ Basis-Pakete installiert"
+
+log_section "openclaw-proxmox Repo klonen"
+tty_write "  Repo klonen..."
+if [ -d "$REPO_DIR/.git" ]; then
+  log "Repo bereits vorhanden — aktualisiere..."
+  cd "$REPO_DIR" && git pull --quiet
+else
+  git clone --quiet "$REPO_URL" "$REPO_DIR"
+  log "✓ Repo geklont: $REPO_DIR"
+fi
+
+# ── Schritt 1c: BOOT-MENÜ (Restore vs. Fresh-Install) ──────────────────────
 #
 # Sucht nach Backup-Daten in zwei Stufen:
 #   1. Dedizierte Partition (Label=OPENCLAW-BAK) — Standard + Ventoy Modus C
@@ -93,30 +169,30 @@ show_boot_menu() {
     [ "$((lxc_count + vm_count + cfg_count))" -gt 0 ] && backup_found=true
   fi
 
-  log ""
-  log "╔══════════════════════════════════════════════════════════════╗"
-  log "║           OpenClaw Proxmox — Willkommen                     ║"
-  log "╠══════════════════════════════════════════════════════════════╣"
-  log "║  [1]  Fresh-Install      Neue Installation                  ║"
+  tty_write ""
+  tty_write "============================================================"
+  tty_write "           OpenClaw Proxmox -- Willkommen                   "
+  tty_write "============================================================"
+  tty_write "  [1]  Fresh-Install      Neue Installation                 "
   if [ "$backup_found" = "true" ]; then
-    log "║  [2]  Disaster Recovery  Backup von USB wiederherstellen    ║"
-    log "╠══════════════════════════════════════════════════════════════╣"
-    log "║  Backup erkannt:  ${lxc_count} LXCs  ${vm_count} VMs  ${cfg_count} Configs  |  Frei: ${free_gb}GB  ║"
-    log "╚══════════════════════════════════════════════════════════════╝"
+    tty_write "  [2]  Disaster Recovery  Backup von USB wiederherstellen   "
+    tty_write "------------------------------------------------------------"
+    tty_write "  Backup erkannt:  ${lxc_count} LXCs  ${vm_count} VMs  ${cfg_count} Configs  |  Frei: ${free_gb}GB"
+    tty_write "============================================================"
     local default_mode=2
-    log ""
-    log "  Auswahl [1/2] (Standard: ${default_mode} — Disaster Recovery — in 30s):"
+    tty_write ""
+    tty_write "  Auswahl [1/2] (Standard: ${default_mode} -- Disaster Recovery -- in 30s):"
   else
-    log "║  [2]  Disaster Recovery  (kein Backup erkannt — inaktiv)    ║"
-    log "╚══════════════════════════════════════════════════════════════╝"
+    tty_write "  [2]  Disaster Recovery  (kein Backup erkannt -- inaktiv)  "
+    tty_write "============================================================"
     local default_mode=1
-    log ""
-    log "  Auswahl [1] (Standard: Fresh-Install — in 30s):"
+    tty_write ""
+    tty_write "  Auswahl [1] (Standard: Fresh-Install -- in 30s):"
   fi
 
-  # Eingabe mit Timeout — bei headless (stdin=/dev/null) sofortiger EOF → Standard
+  # Eingabe von tty1 mit Timeout — bei headless sofortiger EOF -> Standard
   local choice=""
-  read -t 30 -r choice 2>/dev/null || true
+  choice=$(tty_read 30)
   choice="${choice:-$default_mode}"
 
   case "$choice" in
@@ -134,22 +210,48 @@ show_boot_menu() {
 
 log_section "Modus-Auswahl"
 SELECTED_MODE=$(show_boot_menu)
-log "  → Modus: $SELECTED_MODE"
+log "  -> Modus: $SELECTED_MODE"
+log_remote "Modus: $SELECTED_MODE"
+
+# WICHTIG: getty NICHT hier starten — erst ganz am Ende!
+# Sonst übernimmt getty tty1 und der User sieht nur den Login-Prompt statt Status.
 
 # ── Modus-Weiche ─────────────────────────────────────────────────────────────
 if [ "$SELECTED_MODE" = "restore" ]; then
+  tty_write ""
+  tty_write "============================================================"
+  tty_write "  DISASTER RECOVERY: Vollstaendige Wiederherstellung        "
+  tty_write "============================================================"
+  tty_write ""
   log_section "DISASTER RECOVERY: Vollständige Wiederherstellung"
+  log_remote "DISASTER RECOVERY gestartet"
   HOOK_SCRIPT="/root/openclaw-restore-hook.sh"
   [ ! -f "$HOOK_SCRIPT" ] && HOOK_SCRIPT="${REPO_DIR}/autoinstall/restore-hook.sh"
   if [ -f "$HOOK_SCRIPT" ]; then
-    bash "$HOOK_SCRIPT"
+    tty_write "  Starte restore-hook.sh ..."
+    log_remote "restore-hook.sh gefunden: $HOOK_SCRIPT"
+    bash "$HOOK_SCRIPT" 2>&1 | while IFS= read -r line; do
+      tty_write "  $line"
+    done
   else
+    tty_write "  [!!] restore-hook.sh nicht gefunden!"
     log "✗ restore-hook.sh nicht gefunden — Restore abgebrochen"
     log "  Gesucht: /root/openclaw-restore-hook.sh"
+    log_remote "FEHLER: restore-hook.sh nicht gefunden!"
+    log_remote_dump "FAILED"
+    systemctl start getty@tty1.service 2>/dev/null || true
     exit 1
   fi
   touch "$DONE_FLAG"
+  tty_write ""
+  tty_write "============================================================"
+  tty_write "       Disaster Recovery abgeschlossen!                     "
+  tty_write "============================================================"
+  tty_write ""
   log "✓ Disaster Recovery abgeschlossen. Flag: $DONE_FLAG"
+  log_remote_dump "RESTORE OK"
+  # getty erst jetzt starten — User sieht alle Status-Meldungen
+  systemctl start getty@tty1.service 2>/dev/null || true
   exit 0
 fi
 
@@ -176,26 +278,9 @@ iptables -t nat -C POSTROUTING -s 192.168.10.0/24 ! -d 192.168.10.0/24 -j MASQUE
   iptables -t nat -A POSTROUTING -s 192.168.10.0/24 ! -d 192.168.10.0/24 -j MASQUERADE
 log "✓ IP-Masquerade aktiv"
 
-# ── Schritt 2: Proxmox Repos fixen (Enterprise → No-Subscription) ─────────
-log_section "APT Repos konfigurieren"
-# Enterprise-Repos deaktivieren (kein Abo → 401 Fehler bei apt-get update)
-for f in /etc/apt/sources.list.d/pve-enterprise.sources \
-          /etc/apt/sources.list.d/ceph.sources; do
-  if [ -f "$f" ] && ! grep -q "^Enabled: no" "$f"; then
-    echo "Enabled: no" >> "$f"
-    log "  Deaktiviert: $f"
-  fi
-done
+# (APT Repos bereits in Schritt 1b konfiguriert)
 
-# No-Subscription Repo hinzufügen falls nicht vorhanden
-if [ ! -f /etc/apt/sources.list.d/pve-no-subscription.list ]; then
-  echo "deb http://download.proxmox.com/debian/pve trixie pve-no-subscription" \
-    > /etc/apt/sources.list.d/pve-no-subscription.list
-  log "  No-Subscription Repo hinzugefügt"
-fi
-log "✓ APT Repos konfiguriert"
-
-# ── Schritt 2b: Subscription-Popup deaktivieren ───────────────────────────
+# ── Schritt 2: Subscription-Popup deaktivieren ───────────────────────────
 log_section "Subscription-Popup deaktivieren"
 PROXMOX_LIB="/usr/share/javascript/proxmox-widget-toolkit/proxmoxlib.js"
 if [ -f "$PROXMOX_LIB" ]; then
@@ -218,22 +303,8 @@ else
   log "⚠ proxmoxlib.js nicht gefunden — Popup-Fix übersprungen"
 fi
 
-# ── Schritt 3: Basis-Pakete ───────────────────────────────────────────────
-log_section "Basis-Pakete installieren"
-apt-get update -qq
-apt-get install -y -qq git curl
-
-# ── Schritt 4: Repo klonen ────────────────────────────────────────────────
-log_section "openclaw-proxmox Repo klonen"
-if [ -d "$REPO_DIR/.git" ]; then
-  log "Repo bereits vorhanden — aktualisiere..."
-  cd "$REPO_DIR" && git pull --quiet
-else
-  git clone --quiet "$REPO_URL" "$REPO_DIR"
-  log "✓ Repo geklont: $REPO_DIR"
-fi
-
-# ── Schritt 4: Debian 12 LXC Template ────────────────────────────────────
+# ── Schritt 3: Debian 12 LXC Template ────────────────────────────────────
+# (Basis-Pakete + Repo bereits in Schritt 1b installiert/geklont)
 log_section "Debian 12 Template herunterladen"
 pveam update 2>&1 | tail -1 || log "⚠ pveam update fehlgeschlagen — fahre mit bestehendem Cache fort"
 if ! pveam list local 2>/dev/null | grep -q "$TEMPLATE"; then
@@ -323,22 +394,31 @@ fi
 log_section "Setup abgeschlossen"
 PROXMOX_IP=$(ip -4 addr show | grep -oP '(?<=inet\s)\d+(\.\d+){3}' | grep -v 127 | head -1)
 
-log "✓ LXC 110 (Nginx Proxy Manager): http://192.168.10.140:81"
-log "  Login: admin@example.com / changeme  ← SOFORT ÄNDERN!"
-log "✓ LXC 120 (CasaOS Dashboard):    http://192.168.10.141"
-log "✓ LXC 170 (Deployment Hub):     http://192.168.10.170:8100"
+tty_write ""
+tty_write "============================================================"
+tty_write "               OpenClaw Setup abgeschlossen                  "
+tty_write "============================================================"
+tty_write ""
+tty_write "  LXC 110 (Nginx Proxy Manager): http://192.168.10.140:81"
+tty_write "    Login: admin@example.com / changeme  <- SOFORT AENDERN!"
+tty_write "  LXC 120 (CasaOS Dashboard):    http://192.168.10.141"
+tty_write "  LXC 170 (Deployment Hub):      http://192.168.10.170:8100"
+tty_write ""
+tty_write "  Proxmox Web-UI: https://${PROXMOX_IP}:8006"
+tty_write "  SSH:             ssh root@${PROXMOX_IP}"
+tty_write ""
+log "Weitere Services: CasaOS App-Store -> http://192.168.10.141"
 log ""
-log "Proxmox Web-UI: https://${PROXMOX_IP}:8006"
-log "SSH:            ssh root@${PROXMOX_IP}"
-log ""
-log "Weitere Services: CasaOS App-Store → http://192.168.10.141"
-log ""
-log "Optional — YubiKey nachträglich enrollen:"
+log "Optional -- YubiKey nachtraeglich enrollen:"
 log "  bash $REPO_DIR/autoinstall/yubikey-enroll.sh"
 log ""
-log "Optional — Verschlüsselten ZFS Datenpool anlegen:"
+log "Optional -- Verschluesselten ZFS Datenpool anlegen:"
 log "  bash $REPO_DIR/autoinstall/zfs-pool-create.sh"
+
+# getty auf tty1 wieder starten (Login-Prompt nach Setup)
+systemctl start getty@tty1.service 2>/dev/null || true
 
 # Fertig — nie wieder starten
 touch "$DONE_FLAG"
 log "✓ First-Boot abgeschlossen. Flag: $DONE_FLAG"
+log_remote_dump "FRESH-INSTALL OK"
