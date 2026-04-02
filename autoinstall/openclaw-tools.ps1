@@ -53,10 +53,18 @@ function Run-Copy {
 
 function Run-BuildCopy {
     param([string]$DriveLetter)
-    if (-not $DriveLetter) {
-        $DriveLetter = Read-Host "  Ventoy-Laufwerksbuchstabe (z.B. D)"
+    # Erst bauen...
+    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$ScriptDir\build-iso.ps1"
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "  [!!] ISO-Build fehlgeschlagen -- Kopieren uebersprungen." -ForegroundColor Red
+        return
     }
-    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$ScriptDir\build-iso.ps1" -CopyToVentoy $DriveLetter
+    # ...dann kopieren (mit USB-Suche + SHA256-Verifikation)
+    if ($DriveLetter) {
+        & powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$ScriptDir\copy-iso-to-ventoy.ps1" -Drive $DriveLetter
+    } else {
+        & powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$ScriptDir\copy-iso-to-ventoy.ps1"
+    }
 }
 
 function Show-Help {

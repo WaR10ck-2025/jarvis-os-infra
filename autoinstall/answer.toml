@@ -24,15 +24,11 @@ reboot_on_error = false
 root_ssh_keys = ["ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFJXGAWxULzXOcDIJonXl2BjKkdAY+wwDMsEhjGu7mJg war10ck@WaR10ck-11"]
 
 [network]
-# DHCP — IP wird vom Router vergeben
-# LXC-Container bekommen trotzdem feste IPs (192.168.10.x) via pct create
-source = "from-dhcp"
-
-# Alternativ: statische IP
-# source = "from-answer"
-# cidr = "192.168.10.147/24"
-# gateway = "192.168.10.1"
-# dns = "192.168.10.1"
+# Statische IP — garantiert immer 192.168.10.147 nach Autoinstall
+source = "from-answer"
+cidr = "192.168.10.147/24"
+gateway = "192.168.10.1"
+dns = "192.168.10.1"
 
 [disk-setup]
 filesystem = "ext4"
