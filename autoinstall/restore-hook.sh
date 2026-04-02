@@ -307,6 +307,17 @@ else
   log_warn "App-Data-Restore übersprungen (kein Repo oder keine appdata/ auf USB)"
 fi
 
+# ── Phase 9: Hardware-Adaptation ─────────────────────────────────────────────
+log_section "Phase 9: Hardware-Adaptation"
+PHASE9_SCRIPT="${REPO_DIR}/autoinstall/phase9-adapt-hardware.sh"
+if [ -f "$PHASE9_SCRIPT" ]; then
+  log "  Bridge .env + Proxmox API-User + Authentik an neue Hardware anpassen..."
+  bash "$PHASE9_SCRIPT" 2>&1 | while IFS= read -r line; do log "  $line"; done
+  log_ok "Phase 9 abgeschlossen"
+else
+  log_warn "phase9-adapt-hardware.sh nicht gefunden — übersprungen"
+fi
+
 # ── Abschluss ─────────────────────────────────────────────────────────────
 log_section "Disaster Recovery abgeschlossen"
 PROXMOX_IP=$(ip -4 addr show | grep -oP '(?<=inet\s)\d+(\.\d+){3}' | grep -v 127 | head -1)
