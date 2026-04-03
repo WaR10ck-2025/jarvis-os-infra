@@ -41,7 +41,7 @@ log_section "Schritt 1: Hardware erkennen"
 NODE_NAME=$(hostname -s)
 log "  Node-Name:  ${NODE_NAME}"
 
-HOST_IP=$(ip -4 addr show vmbr0 2>/dev/null | grep -oP 'inet \K[^/]+' || echo "")
+HOST_IP=$(ip -4 addr show vmbr0 2>/dev/null | grep -oP 'inet \K[^/]+' | head -1 || echo "")
 if [ -z "$HOST_IP" ]; then
   # Fallback: erste nicht-localhost IP
   HOST_IP=$(hostname -I 2>/dev/null | awk '{print $1}')
