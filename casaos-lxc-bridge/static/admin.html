@@ -132,7 +132,34 @@
     .oidc-user-badge strong { color: var(--text); }
 
     /* ── Main Layout ─────────────────────────────────────────── */
-    main { padding: 28px 24px; max-width: 1100px; margin: 0 auto; }
+    main { padding: 0 24px 28px; max-width: 1100px; margin: 0 auto; }
+
+    /* ── Tab Navigation ──────────────────────────────────────── */
+    .tab-bar {
+      display: flex; gap: 0; border-bottom: 1px solid var(--border);
+      padding: 0 24px; max-width: 1100px; margin: 0 auto;
+      overflow-x: auto; -webkit-overflow-scrolling: touch;
+    }
+    .tab-btn {
+      padding: 14px 18px; font-size: 0.82rem; font-weight: 500;
+      color: var(--muted); background: none; border: none;
+      cursor: pointer; white-space: nowrap; position: relative;
+      transition: color .15s;
+    }
+    .tab-btn:hover { color: var(--text); }
+    .tab-btn.active { color: var(--accent); font-weight: 600; }
+    .tab-btn.active::after {
+      content: ''; position: absolute; bottom: -1px; left: 0; right: 0;
+      height: 2px; background: var(--accent); border-radius: 2px 2px 0 0;
+    }
+    .tab-btn .tab-badge {
+      background: var(--border); color: var(--muted);
+      font-size: 0.65rem; padding: 1px 6px; border-radius: 20px;
+      margin-left: 6px; vertical-align: middle;
+    }
+    .tab-btn.active .tab-badge { background: rgba(79,124,255,.2); color: var(--accent); }
+    .tab-panel { display: none; padding-top: 24px; }
+    .tab-panel.active { display: block; }
 
     .section-header {
       display: flex; align-items: center; gap: 12px;
@@ -351,71 +378,111 @@
   </div>
 </div>
 
+<!-- ── Tab Bar ────────────────────────────────────────────────── -->
+<nav class="tab-bar" id="tabBar" style="display:none">
+  <button class="tab-btn active" data-tab="users" onclick="switchTab('users')">Users <span class="tab-badge" id="tabUserCount">0</span></button>
+  <button class="tab-btn" data-tab="resources" onclick="switchTab('resources')">Ressourcen</button>
+  <button class="tab-btn" data-tab="requests" onclick="switchTab('requests')">App-Anfragen <span class="tab-badge" id="tabRequestCount">0</span></button>
+  <button class="tab-btn" data-tab="backup" onclick="switchTab('backup')">Backup</button>
+  <button class="tab-btn" data-tab="yubikey" onclick="switchTab('yubikey')" style="display:none">YubiKey</button>
+</nav>
+
 <!-- ── Main ───────────────────────────────────────────────────── -->
 <main id="mainContent" style="display:none">
-  <!-- ── Ressourcen-Übersicht ──────────────────────────────── -->
-  <div class="section-header" style="margin-top:28px">
-    <h2>Ressourcen</h2>
-    <button class="btn btn-ghost btn-sm" onclick="loadResources()">⟳ Aktualisieren</button>
-  </div>
-  <div id="resourcesWrap" style="display:none">
-    <table class="user-table" id="resourcesTable">
-      <thead><tr>
-        <th>User</th>
-        <th>Dashboard</th>
-        <th>CPU</th>
-        <th>RAM</th>
-        <th>Speicher</th>
-      </tr></thead>
-      <tbody id="resourcesBody"></tbody>
-    </table>
-  </div>
 
-  <!-- ── App-Anfragen ──────────────────────────────────────── -->
-  <div class="section-header" style="margin-top:28px">
-    <h2>App-Anfragen</h2>
-    <span class="count-badge" id="requestCount">0</span>
-    <button class="btn btn-ghost btn-sm" onclick="loadRequests()">⟳ Aktualisieren</button>
-  </div>
-  <div id="requestsWrap">
-    <div class="empty" id="requestsEmpty"><div class="big">📭</div>Keine offenen Anfragen.</div>
-    <table class="user-table" id="requestsTable" style="display:none">
-      <thead><tr>
-        <th>User</th>
-        <th>App-ID</th>
-        <th>Angefragt</th>
-        <th style="text-align:right">Aktionen</th>
-      </tr></thead>
-      <tbody id="requestsBody"></tbody>
-    </table>
-  </div>
-
-  <!-- ── Users ─────────────────────────────────────────────── -->
-  <div class="section-header" style="margin-top:28px">
-    <h2>Users</h2>
-    <span class="count-badge" id="userCount">0</span>
-    <button class="btn btn-primary btn-sm" onclick="openModal()">+ Neuer User</button>
-  </div>
-
-  <div id="tableWrap">
-    <div class="empty"><div class="big">👥</div>Keine User angelegt.</div>
-  </div>
-
-  <!-- ── YubiKey-Verwaltung ─────────────────────────────────── -->
-  <div id="yubiSection" style="display:none">
-    <div class="section-header" style="margin-top:28px">
-      <h2>YubiKey / WebAuthn</h2>
+  <!-- ══ Tab: Users ════════════════════════════════════════════ -->
+  <div class="tab-panel active" id="tab-users">
+    <div class="section-header">
+      <h2>Users</h2>
+      <span class="count-badge" id="userCount">0</span>
+      <button class="btn btn-primary btn-sm" onclick="openModal()">+ Neuer User</button>
     </div>
-    <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px;margin-bottom:12px">
-      <p style="color:var(--muted);font-size:0.85rem;margin-bottom:12px">Registriere einen YubiKey als zusätzliche Login-Methode für das Admin-Dashboard.</p>
-      <button class="btn btn-primary btn-sm" id="yubiRegisterBtn" onclick="yubiRegister()">+ YubiKey registrieren</button>
-      <span id="yubiRegisterMsg" style="font-size:0.8rem;color:var(--muted);margin-left:12px"></span>
-      <table class="user-table" style="margin-top:14px">
-        <thead><tr><th>#</th><th>Registriert am</th><th></th></tr></thead>
-        <tbody id="yubiKeysList"><tr><td colspan="3" style="color:var(--muted);text-align:center">Wird geladen…</td></tr></tbody>
+    <div id="tableWrap">
+      <div class="empty"><div class="big">👥</div>Keine User angelegt.</div>
+    </div>
+  </div>
+
+  <!-- ══ Tab: Ressourcen ═══════════════════════════════════════ -->
+  <div class="tab-panel" id="tab-resources">
+    <div class="section-header">
+      <h2>Ressourcen</h2>
+      <button class="btn btn-ghost btn-sm" onclick="loadResources()">⟳ Aktualisieren</button>
+    </div>
+    <div id="resourcesWrap" style="display:none">
+      <table class="user-table" id="resourcesTable">
+        <thead><tr>
+          <th>User</th>
+          <th>Dashboard</th>
+          <th>CPU</th>
+          <th>RAM</th>
+          <th>Speicher</th>
+        </tr></thead>
+        <tbody id="resourcesBody"></tbody>
       </table>
     </div>
   </div>
+
+  <!-- ══ Tab: App-Anfragen ═════════════════════════════════════ -->
+  <div class="tab-panel" id="tab-requests">
+    <div class="section-header">
+      <h2>App-Anfragen</h2>
+      <span class="count-badge" id="requestCount">0</span>
+      <button class="btn btn-ghost btn-sm" onclick="loadRequests()">⟳ Aktualisieren</button>
+    </div>
+    <div id="requestsWrap">
+      <div class="empty" id="requestsEmpty"><div class="big">📭</div>Keine offenen Anfragen.</div>
+      <table class="user-table" id="requestsTable" style="display:none">
+        <thead><tr>
+          <th>User</th>
+          <th>App-ID</th>
+          <th>Angefragt</th>
+          <th style="text-align:right">Aktionen</th>
+        </tr></thead>
+        <tbody id="requestsBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ══ Tab: Backup ═══════════════════════════════════════════ -->
+  <div class="tab-panel" id="tab-backup">
+    <div class="section-header">
+      <h2>Backup</h2>
+      <span id="backupStatusBadge" style="font-size:0.75rem;padding:2px 8px;border-radius:9999px;background:var(--surface);color:var(--muted);border:1px solid var(--border)"></span>
+    </div>
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px;margin-bottom:12px">
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px">
+        <select id="backupLayer" style="background:var(--bg);color:var(--fg);border:1px solid var(--border);border-radius:var(--radius);padding:6px 10px;font-size:0.85rem">
+          <option value="all">Alle Layer (1+2+3)</option>
+          <option value="1">Layer 1 — Config</option>
+          <option value="2">Layer 2 — vzdump (LXC/VM)</option>
+          <option value="3">Layer 3 — App-Daten</option>
+          <option value="1,3">Layer 1+3 (schnell)</option>
+        </select>
+        <button class="btn btn-primary btn-sm" id="backupStartBtn" onclick="startBackup()">▶ Backup starten</button>
+        <span id="backupMsg" style="font-size:0.8rem;color:var(--muted)"></span>
+      </div>
+      <pre id="backupLog" style="display:none;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:12px;font-size:0.75rem;max-height:400px;overflow-y:auto;white-space:pre-wrap;color:var(--fg);margin:0"></pre>
+    </div>
+  </div>
+
+  <!-- ══ Tab: YubiKey ══════════════════════════════════════════ -->
+  <div class="tab-panel" id="tab-yubikey">
+    <div id="yubiSection">
+      <div class="section-header">
+        <h2>YubiKey / WebAuthn</h2>
+      </div>
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px;margin-bottom:12px">
+        <p style="color:var(--muted);font-size:0.85rem;margin-bottom:12px">Registriere einen YubiKey als zusätzliche Login-Methode für das Admin-Dashboard.</p>
+        <button class="btn btn-primary btn-sm" id="yubiRegisterBtn" onclick="yubiRegister()">+ YubiKey registrieren</button>
+        <span id="yubiRegisterMsg" style="font-size:0.8rem;color:var(--muted);margin-left:12px"></span>
+        <table class="user-table" style="margin-top:14px">
+          <thead><tr><th>#</th><th>Registriert am</th><th></th></tr></thead>
+          <tbody id="yubiKeysList"><tr><td colspan="3" style="color:var(--muted);text-align:center">Wird geladen…</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
 </main>
 
 <!-- ── Toast ──────────────────────────────────────────────────── -->
@@ -434,6 +501,13 @@
       <label>Speicher-Quota (ZFS)</label>
       <input id="newQuota" type="text" value="100G" placeholder="100G">
     </div>
+    <div class="form-group">
+      <label>Dashboard-Typ</label>
+      <select id="newDashboardType">
+        <option value="casaos" selected>📦 CasaOS (LXC)</option>
+        <option value="ugos">🖥 UGOS (VM)</option>
+      </select>
+    </div>
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="closeModal()">Abbrechen</button>
       <button class="btn btn-primary" id="createBtn" onclick="submitCreate()">Anlegen →</button>
@@ -448,6 +522,17 @@
   let expandedUser   = null;   // user_id oder null
   let pollingTimers  = {};     // user_id → intervalId
   let detailCache    = {};     // user_id → full status object
+
+  /* ── Tab Navigation ──────────────────────────────────────────── */
+  function switchTab(tabId) {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tabId));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === 'tab-' + tabId));
+    // Lazy-load data when switching to tab
+    if (tabId === 'resources') loadResources();
+    if (tabId === 'requests') loadRequests();
+    if (tabId === 'backup') loadBackupStatus();
+    if (tabId === 'yubikey') loadYubiKeys();
+  }
 
   const STEPS = {
     'creating_bridge':         'Netzwerk anlegen…',
@@ -543,6 +628,7 @@
       document.getElementById('mainContent').style.display = '';
       document.getElementById('keyStatus').classList.add('visible');
       document.getElementById('userCount').textContent = users.length;
+      const tuc = document.getElementById('tabUserCount'); if (tuc) tuc.textContent = users.length;
       renderUsers();
       // Polling für provisionierende User starten
       users.forEach(u => {
@@ -593,6 +679,7 @@
       const data = await apiFetch('/admin/apps/requests');
       const count = data.count || 0;
       document.getElementById('requestCount').textContent = count;
+      const trc = document.getElementById('tabRequestCount'); if (trc) trc.textContent = count;
       const empty = document.getElementById('requestsEmpty');
       const table = document.getElementById('requestsTable');
       if (!count) {
@@ -670,6 +757,10 @@
         <td style="font-size:.85rem;font-family:monospace;color:var(--muted)">${esc(u.subnet)}</td>
         <td>
           <div class="row-actions">
+            <button class="btn-icon" title="User App-Store Link kopieren"
+                    onclick="copy(location.origin+'/static/user-store.html?key=${esc(u.api_key)}', this)">
+              🛒
+            </button>
             <button class="btn-icon" title="Credentials anzeigen"
                     onclick="toggleDetails(${u.user_id})">
               ${isExpanded ? '🔼' : '👁'}
@@ -947,6 +1038,7 @@
         const idx = users.findIndex(x => x.user_id === userId);
         if (idx >= 0) users[idx] = { ...users[idx], ...data };
         document.getElementById('userCount').textContent = users.length;
+      const tuc = document.getElementById('tabUserCount'); if (tuc) tuc.textContent = users.length;
         renderUsers();
 
         if (data.status === 'ready' || data.status === 'error') {
@@ -971,13 +1063,15 @@
     document.getElementById('modal').classList.remove('open');
     document.getElementById('newUsername').value = '';
     document.getElementById('newQuota').value = '100G';
+    document.getElementById('newDashboardType').value = 'casaos';
     document.getElementById('createBtn').disabled = false;
     document.getElementById('createBtn').textContent = 'Anlegen →';
   }
 
   async function submitCreate() {
-    const username = document.getElementById('newUsername').value.trim();
-    const quota    = document.getElementById('newQuota').value.trim() || '100G';
+    const username      = document.getElementById('newUsername').value.trim();
+    const quota         = document.getElementById('newQuota').value.trim() || '100G';
+    const dashboardType = document.getElementById('newDashboardType').value;
     if (!username) { toast('Username fehlt', 'err'); return; }
     if (!/^[a-z0-9_-]{2,32}$/.test(username)) {
       toast('Username: nur a-z, 0-9, _ und - (2–32 Zeichen)', 'err'); return;
@@ -987,7 +1081,7 @@
     btn.textContent = 'Anlegen…';
     try {
       const data = await apiFetch(
-        `/admin/users?username=${encodeURIComponent(username)}&quota=${encodeURIComponent(quota)}`,
+        `/admin/users?username=${encodeURIComponent(username)}&quota=${encodeURIComponent(quota)}&dashboard_type=${encodeURIComponent(dashboardType)}`,
         { method: 'POST' }
       );
       closeModal();
@@ -1005,12 +1099,19 @@
   async function copy(text, btn) {
     try {
       await navigator.clipboard.writeText(text);
-      const orig = btn.textContent;
-      btn.textContent = '✓';
-      setTimeout(() => { btn.textContent = orig; }, 1500);
     } catch {
-      toast('Kopieren fehlgeschlagen', 'err');
+      // Fallback fuer non-HTTPS Kontexte
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.cssText = 'position:fixed;left:-9999px';
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      ta.remove();
     }
+    const orig = btn.textContent;
+    btn.textContent = '✓';
+    setTimeout(() => { btn.textContent = orig; }, 1500);
   }
 
   /* ── Toast ──────────────────────────────────────────────────── */
@@ -1082,6 +1183,82 @@
     }
   }
 
+  // ── Backup ──────────────────────────────────────────────
+  async function loadBackupStatus() {
+    try {
+      const s = await apiFetch('/admin/backup/status');
+      const badge = document.getElementById('backupStatusBadge');
+      if (s.running) {
+        badge.textContent = '⏳ läuft…';
+        badge.style.background = '#2563eb33'; badge.style.color = '#60a5fa';
+      } else if (s.last_result === 'ok') {
+        badge.textContent = '✓ ' + (s.last_run || '');
+        badge.style.background = '#16a34a33'; badge.style.color = '#4ade80';
+      } else if (s.last_result === 'error') {
+        badge.textContent = '✗ Fehler ' + (s.last_run || '');
+        badge.style.background = '#dc262633'; badge.style.color = '#f87171';
+      } else {
+        badge.textContent = 'Kein Backup';
+      }
+    } catch {}
+  }
+
+  async function startBackup() {
+    const btn = document.getElementById('backupStartBtn');
+    const msg = document.getElementById('backupMsg');
+    const log = document.getElementById('backupLog');
+    const layer = document.getElementById('backupLayer').value;
+
+    btn.disabled = true;
+    msg.textContent = 'Backup wird gestartet…';
+    log.style.display = 'block';
+    log.textContent = '';
+
+    try {
+      const resp = await fetch(`/admin/backup?layer=${layer}`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        throw new Error(err.detail || `HTTP ${resp.status}`);
+      }
+
+      const reader = resp.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop();
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          const ev = JSON.parse(line.slice(6));
+          if (ev.type === 'log') {
+            log.textContent += ev.line + '\n';
+            log.scrollTop = log.scrollHeight;
+          } else if (ev.type === 'done') {
+            msg.textContent = ev.success ? '✓ Backup erfolgreich!' : '✗ Backup fehlgeschlagen';
+            msg.style.color = ev.success ? '#4ade80' : '#f87171';
+          } else if (ev.type === 'error') {
+            msg.textContent = '✗ ' + ev.message;
+            msg.style.color = '#f87171';
+          } else if (ev.type === 'start') {
+            msg.textContent = `Layer ${ev.layer} wird gesichert…`;
+          }
+        }
+      }
+    } catch (e) {
+      msg.textContent = '✗ ' + e.message;
+      msg.style.color = '#f87171';
+    }
+    btn.disabled = false;
+    loadBackupStatus();
+  }
+
   async function yubiRegister() {
     const btn = document.getElementById('yubiRegisterBtn');
     const msg = document.getElementById('yubiRegisterMsg');
@@ -1104,11 +1281,14 @@
   async function loadYubiKeys() {
     const list = document.getElementById('yubiKeysList');
     if (!list) return;
-    // Sektion nur einblenden wenn WebAuthn aktiv (API erreichbar)
+    // YubiKey-Tab nur einblenden wenn WebAuthn aktiv
     try {
       const wn = await fetch('/auth/webauthn/enabled');
-      if (wn.ok && (await wn.json()).enabled)
+      if (wn.ok && (await wn.json()).enabled) {
         document.getElementById('yubiSection').style.display = '';
+        const ykTab = document.querySelector('[data-tab="yubikey"]');
+        if (ykTab) ykTab.style.display = '';
+      }
     } catch {}
     try {
       const data = await apiFetch('/auth/webauthn/credentials');
@@ -1142,10 +1322,12 @@
 
     const oidcOk = await checkOidcSession();
     if (oidcOk) {
-      await loadUsers(); loadResources(); loadRequests(); loadYubiKeys();
+      document.getElementById('tabBar').style.display = '';
+      await loadUsers(); loadRequests(); loadYubiKeys();
     } else if (adminKey) {
       document.getElementById('keyInput').value = '••••••••';
-      await loadUsers(); loadResources(); loadRequests(); loadYubiKeys();
+      document.getElementById('tabBar').style.display = '';
+      await loadUsers(); loadRequests(); loadYubiKeys();
     } else {
       showOverlayIfNeeded();
     }

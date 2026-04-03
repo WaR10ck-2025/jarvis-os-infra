@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mein App-Store — OpenClaw</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0f1117;
+      --surface: #1a1d27;
+      --border: #2a2d3a;
+      --accent: #4f7cff;
+      --accent-hover: #6b93ff;
+      --green: #22c55e;
+      --red: #ef4444;
+      --yellow: #f59e0b;
+      --text: #e2e8f0;
+      --muted: #64748b;
+      --radius: 12px;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 24px;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 32px;
+    }
+    header h1 { font-size: 1.4rem; font-weight: 700; letter-spacing: -0.02em; }
+    header p { color: var(--muted); font-size: 0.85rem; margin-top: 2px; }
+    .logo {
+      width: 40px; height: 40px; border-radius: 10px;
+      background: linear-gradient(135deg, var(--accent), #7c3aed);
+      display: grid; place-items: center; font-size: 1.4rem;
+    }
+    .user-badge {
+      margin-left: auto;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 8px; padding: 6px 14px;
+      font-size: 0.8rem; color: var(--muted);
+    }
+    .user-badge strong { color: var(--text); }
+
+    section { margin-bottom: 40px; }
+    .section-header {
+      display: flex; align-items: center; gap: 10px;
+      margin-bottom: 16px; padding-bottom: 10px;
+      border-bottom: 1px solid var(--border);
+    }
+    .section-header h2 { font-size: 1rem; font-weight: 600; }
+    .section-header .count {
+      background: var(--border); color: var(--muted);
+      font-size: 0.75rem; padding: 2px 8px; border-radius: 20px;
+    }
+
+    .app-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 14px;
+    }
+
+    .app-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 18px 16px;
+      display: flex; flex-direction: column; gap: 10px;
+      transition: border-color 0.15s, transform 0.1s;
+    }
+    .app-card:hover { border-color: var(--accent); transform: translateY(-1px); }
+
+    .app-icon {
+      width: 48px; height: 48px; border-radius: 10px;
+      object-fit: cover; background: var(--border);
+    }
+    .app-icon-fallback {
+      width: 48px; height: 48px; border-radius: 10px;
+      background: linear-gradient(135deg, #2a2d3a, #3a3d4a);
+      display: grid; place-items: center; font-size: 1.5rem;
+      flex-shrink: 0;
+    }
+    .app-name { font-weight: 600; font-size: 0.95rem; }
+    .app-tagline { color: var(--muted); font-size: 0.78rem; line-height: 1.4; flex: 1; }
+
+    .badge {
+      display: inline-flex; align-items: center; gap: 4px;
+      font-size: 0.7rem; padding: 2px 8px; border-radius: 20px; font-weight: 500;
+    }
+    .badge.running     { background: #16a34a22; color: var(--green); }
+    .badge.stopped     { background: #f59e0b22; color: var(--yellow); }
+    .badge.error       { background: #ef444422; color: var(--red); }
+    .badge.installing  { background: #4f7cff22; color: var(--accent); }
+    .badge.pending     { background: #f59e0b22; color: var(--yellow); }
+    .badge.approved    { background: #16a34a22; color: var(--green); }
+    .badge.denied      { background: #ef444422; color: var(--red); }
+
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+      padding: 7px 14px; border-radius: 8px; border: none;
+      font-size: 0.8rem; font-weight: 600; cursor: pointer;
+      transition: background 0.15s, opacity 0.15s;
+    }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-primary:hover:not(:disabled) { background: var(--accent-hover); }
+    .btn-ghost { background: var(--border); color: var(--text); }
+    .btn-ghost:hover:not(:disabled) { background: #3a3d4a; }
+
+    .card-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+
+    .installed-list { display: flex; flex-direction: column; gap: 10px; }
+    .installed-row {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 14px 16px;
+      display: flex; align-items: center; gap: 14px;
+    }
+    .installed-row .app-icon, .installed-row .app-icon-fallback { width: 36px; height: 36px; }
+    .installed-info { flex: 1; }
+    .installed-info .name { font-weight: 600; font-size: 0.9rem; }
+    .installed-info .url  { color: var(--muted); font-size: 0.78rem; margin-top: 2px; }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spinner {
+      display: inline-block; width: 12px; height: 12px;
+      border: 2px solid currentColor; border-top-color: transparent;
+      border-radius: 50%; animation: spin 0.6s linear infinite;
+    }
+
+    .toast {
+      position: fixed; bottom: 24px; right: 24px;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 10px; padding: 12px 18px;
+      font-size: 0.85rem; max-width: 320px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+      animation: slideIn 0.2s ease;
+      z-index: 999;
+    }
+    @keyframes slideIn { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:none; } }
+    .toast.error { border-color: var(--red); }
+    .toast.success { border-color: var(--green); }
+
+    .empty { color: var(--muted); font-size: 0.85rem; padding: 12px 0; }
+
+    .error-banner {
+      background: #ef444422; border: 1px solid var(--red); border-radius: var(--radius);
+      padding: 20px; text-align: center; color: var(--red); font-weight: 600;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">🛒</div>
+  <div>
+    <h1>Mein App-Store</h1>
+    <p>Apps anfragen und verwalten</p>
+  </div>
+  <div class="user-badge" id="userBadge" style="display:none">
+    Angemeldet als <strong id="userName">—</strong>
+  </div>
+</header>
+
+<div id="errorBanner" style="display:none"></div>
+
+<!-- Verfuegbare Apps -->
+<section id="sectionAvailable">
+  <div class="section-header">
+    <span>⭐</span>
+    <h2>Verfügbare Apps</h2>
+    <span class="count" id="available-count">…</span>
+  </div>
+  <div class="app-grid" id="available-grid">
+    <div class="empty">Lade…</div>
+  </div>
+</section>
+
+<!-- Meine Apps -->
+<section id="sectionMyApps">
+  <div class="section-header">
+    <span>📦</span>
+    <h2>Meine Apps</h2>
+    <span class="count" id="my-apps-count">0</span>
+  </div>
+  <div class="installed-list" id="my-apps-list">
+    <div class="empty">Noch keine Apps installiert.</div>
+  </div>
+</section>
+
+<script>
+const API = '';
+const API_KEY = new URLSearchParams(location.search).get('key');
+let myApps = {};
+let pendingRequests = {};
+let pollingTimers = {};
+
+/* ── Auth-Check ─────────────────────────────────────────── */
+if (!API_KEY) {
+  document.getElementById('errorBanner').style.display = '';
+  document.getElementById('errorBanner').innerHTML =
+    '<div class="error-banner">Kein API-Key angegeben. Bitte den Link vom Admin verwenden.</div>';
+  document.getElementById('sectionAvailable').style.display = 'none';
+  document.getElementById('sectionMyApps').style.display = 'none';
+}
+
+/* ── API Helper ─────────────────────────────────────────── */
+async function apiFetch(path, opts = {}) {
+  const res = await fetch(API + path, {
+    ...opts,
+    headers: { 'X-API-Key': API_KEY, ...(opts.headers || {}) }
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(err.detail || res.statusText);
+  }
+  return res.json();
+}
+
+/* ── Helpers ────────────────────────────────────────────── */
+function toast(msg, type = 'info') {
+  const el = document.createElement('div');
+  el.className = `toast ${type}`;
+  el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 4000);
+}
+
+function statusBadge(status) {
+  const labels = {
+    running: '● Läuft', stopped: '○ Gestoppt',
+    installing: '⟳ Installiert…', error: '✗ Fehler',
+    pending: '⏳ Angefragt', approved: '✓ Genehmigt', denied: '✗ Abgelehnt',
+  };
+  return `<span class="badge ${status}">${labels[status] || status}</span>`;
+}
+
+function iconEl(icon, name) {
+  if (icon) {
+    return `<img class="app-icon" src="${icon}" alt="${name}"
+              onerror="this.outerHTML='<div class=\\'app-icon-fallback\\'>📦</div>'" loading="lazy">`;
+  }
+  return `<div class="app-icon-fallback">📦</div>`;
+}
+
+function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+/* ── App anfragen ───────────────────────────────────────── */
+async function requestApp(appId, btn) {
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Anfrage…';
+  try {
+    const data = await apiFetch(
+      `/bridge/apps/request?appid=${encodeURIComponent(appId)}`,
+      { method: 'POST' }
+    );
+    if (data.status === 'installed') {
+      toast(`${appId} wird installiert…`, 'success');
+      pollStatus(appId, data.scoped_app_id || appId);
+    } else {
+      toast(`${appId} beim Admin angefragt`, 'success');
+    }
+    await reload();
+  } catch (e) {
+    toast(`Fehler: ${e.message}`, 'error');
+    btn.disabled = false;
+    btn.innerHTML = 'Anfragen';
+  }
+}
+
+/* ── Status-Polling ─────────────────────────────────────── */
+function pollStatus(appId, scopedId) {
+  const pollId = scopedId || appId;
+  if (pollingTimers[pollId]) return;
+  pollingTimers[pollId] = setInterval(async () => {
+    try {
+      const d = await apiFetch(`/bridge/status?appid=${encodeURIComponent(pollId)}`);
+      if (d.status === 'running' || d.status === 'error') {
+        clearInterval(pollingTimers[pollId]);
+        delete pollingTimers[pollId];
+        await reload();
+        if (d.status === 'running') toast(`${appId} ist bereit!`, 'success');
+        else toast(`${appId}: Installationsfehler`, 'error');
+      }
+    } catch {}
+  }, 3000);
+}
+
+/* ── Verfuegbare Apps laden ─────────────────────────────── */
+async function loadAvailable() {
+  try {
+    const data = await apiFetch('/bridge/preconfigured');
+    const apps = data.apps || [];
+    document.getElementById('available-count').textContent = apps.length;
+    const grid = document.getElementById('available-grid');
+    if (!apps.length) { grid.innerHTML = '<div class="empty">Keine Apps verfügbar.</div>'; return; }
+
+    grid.innerHTML = apps.map(app => {
+      const appId = app.app_id;
+      const isInstalled = !!myApps[appId];
+      const isPending = !!pendingRequests[appId];
+      const url = isInstalled && myApps[appId].url ? myApps[appId].url : null;
+
+      let actionHtml;
+      if (isInstalled) {
+        actionHtml = `${statusBadge(myApps[appId].status)}
+          ${url ? `<a class="btn btn-ghost" href="${esc(url)}" target="_blank">Öffnen</a>` : ''}`;
+      } else if (isPending) {
+        actionHtml = statusBadge(pendingRequests[appId]);
+      } else {
+        actionHtml = `<button class="btn btn-primary" onclick="requestApp('${esc(appId)}', this)">Anfragen</button>`;
+      }
+
+      return `
+        <div class="app-card">
+          ${iconEl(app.icon, app.name)}
+          <div>
+            <div class="app-name">${esc(app.name)}</div>
+            <div class="app-tagline">${esc(app.tagline || '')}</div>
+          </div>
+          <div class="card-actions">${actionHtml}</div>
+        </div>`;
+    }).join('');
+  } catch (e) {
+    document.getElementById('available-grid').innerHTML =
+      '<div class="empty">Fehler beim Laden.</div>';
+  }
+}
+
+/* ── Meine Apps laden ───────────────────────────────────── */
+async function loadMyApps() {
+  try {
+    const data = await apiFetch('/bridge/list');
+    const apps = data.apps || [];
+    // Index nach base app_id (ohne u{id}__ prefix)
+    myApps = {};
+    apps.forEach(a => {
+      const baseId = a.app_id.includes('__') ? a.app_id.split('__')[1] : a.app_id;
+      myApps[baseId] = a;
+    });
+    document.getElementById('my-apps-count').textContent = apps.length;
+    const list = document.getElementById('my-apps-list');
+    if (!apps.length) { list.innerHTML = '<div class="empty">Noch keine Apps installiert.</div>'; return; }
+
+    list.innerHTML = apps.map(app => {
+      const baseId = app.app_id.includes('__') ? app.app_id.split('__')[1] : app.app_id;
+      return `
+        <div class="installed-row">
+          <div class="app-icon-fallback" style="font-size:1rem">📦</div>
+          <div class="installed-info">
+            <div class="name">${esc(baseId)}</div>
+            <div class="url">${esc(app.url)} · LXC ${app.lxc_id}</div>
+          </div>
+          ${statusBadge(app.status)}
+          ${app.url ? `<a class="btn btn-ghost" href="${esc(app.url)}" target="_blank">Öffnen</a>` : ''}
+        </div>`;
+    }).join('');
+
+    // Polling fuer installierende Apps
+    apps.filter(a => a.status === 'installing').forEach(a => {
+      const baseId = a.app_id.includes('__') ? a.app_id.split('__')[1] : a.app_id;
+      pollStatus(baseId, a.app_id);
+    });
+  } catch {}
+}
+
+/* ── Pending Requests laden ─────────────────────────────── */
+async function loadPendingRequests() {
+  try {
+    const data = await apiFetch('/bridge/apps/requests');
+    const reqs = data.requests || [];
+    pendingRequests = {};
+    reqs.forEach(r => { pendingRequests[r.app_id] = r.status; });
+  } catch {
+    // Endpoint existiert ggf. noch nicht — kein Fehler zeigen
+    pendingRequests = {};
+  }
+}
+
+/* ── Username anzeigen ──────────────────────────────────── */
+async function loadUserInfo() {
+  try {
+    const data = await apiFetch('/bridge/list');
+    // Username aus dem ersten Scoped-App-ID ableiten oder via /admin/users endpoint
+  } catch {}
+}
+
+/* ── Reload ─────────────────────────────────────────────── */
+async function reload() {
+  await loadMyApps();
+  await loadPendingRequests();
+  await loadAvailable();
+}
+
+/* ── Init ───────────────────────────────────────────────── */
+if (API_KEY) {
+  reload();
+}
+</script>
+</body>
+</html>

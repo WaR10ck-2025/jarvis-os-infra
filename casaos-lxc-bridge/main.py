@@ -17,11 +17,13 @@ Endpunkte:
   GET    /health                             Liveness-Check
 
   --- Admin-Endpoints (X-API-Key: $ADMIN_KEY erforderlich) ---
-  POST   /admin/users?username=X&quota=100G  User anlegen + provisionieren
+  POST   /admin/users?username=X&quota=100G&dashboard_type=casaos  User anlegen + provisionieren
   GET    /admin/users                        Alle User auflisten
   GET    /admin/users/{id}/status           User-Status + Zugangsdaten
   GET    /admin/users/{id}/quota            ZFS-Quota + Nutzung
   DELETE /admin/users/{id}                  User + alle Ressourcen entfernen
+  POST   /admin/backup?layer=all             Backup auslösen (SSE Live-Log)
+  GET    /admin/backup/status                Letzter Backup-Status
 """
 from __future__ import annotations
 import asyncio
@@ -496,6 +498,7 @@ async def create_user(
     username: str = Query(..., description="Eindeutiger Username"),
     quota: str = Query("100G", description="ZFS-Quota z.B. '50G', '200G'"),
     storage_tier: str = Query("premium", description="'premium' (SSD) | 'standard' (HDD)"),
+    dashboard_type: str = Query("casaos", description="'casaos' (LXC) | 'ugos' (VM)"),
     _: None = Depends(require_admin),
 ):
     """
@@ -504,7 +507,7 @@ async def create_user(
     """
     try:
         result = await asyncio.to_thread(
-            user_manager.provision_user, username, quota, storage_tier
+            user_manager.provision_user, username, quota, storage_tier, dashboard_type
         )
     except RuntimeError as e:
         raise HTTPException(409 if "vergeben" in str(e) else 500, detail=str(e))
@@ -693,7 +696,9 @@ async def request_app(
     """
     from lxc_manager import _get_db
     conn = _get_db()
-    user_id = user["user_id"]
+    user_id = user if isinstance(user, int) else None
+    if user_id is None:
+        raise HTTPException(400, detail="Nur für User mit API-Key verfügbar")
 
     # Bereits laufende Anfragen prüfen
     existing = conn.execute(
@@ -796,6 +801,97 @@ async def admin_deny_request(
     if result.rowcount == 0:
         raise HTTPException(404, detail="Anfrage nicht gefunden oder bereits bearbeitet")
     return {"success": True, "request_id": request_id}
+
+
+@app.get("/bridge/apps/requests")
+async def user_list_requests(
+    user=Depends(require_user_or_admin),
+):
+    """Eigene App-Anfragen des Users (pending/approved/denied)."""
+    from lxc_manager import _get_db
+    user_id = user if isinstance(user, int) else None
+    if user_id is None:
+        raise HTTPException(400, detail="Nur für User mit API-Key verfügbar")
+    conn = _get_db()
+    rows = conn.execute(
+        "SELECT id, app_id, status, requested_at, notes FROM app_requests "
+        "WHERE user_id=? ORDER BY requested_at DESC",
+        (user_id,)
+    ).fetchall()
+    return {
+        "requests": [dict(r) for r in rows],
+    }
+
+
+# ---------------------------------------------------------------------------
+# Backup-Endpoints (Admin-only)
+# ---------------------------------------------------------------------------
+from fastapi.responses import StreamingResponse
+
+_backup_status: dict = {"running": False, "last_run": None, "last_result": None}
+
+
+@app.post("/admin/backup")
+async def admin_trigger_backup(
+    layer: str = Query("all", description="Layer: 1, 2, 3, 1,3, oder all"),
+    _: None = Depends(require_admin),
+):
+    """
+    Löst backup-all.sh auf dem Proxmox-Host aus.
+    Gibt SSE-Stream mit Live-Log-Output zurück.
+    """
+    if _backup_status["running"]:
+        raise HTTPException(409, detail="Backup läuft bereits")
+
+    from proxmox_client import ProxmoxClient
+    proxmox = ProxmoxClient()
+
+    async def stream_backup():
+        import subprocess, tempfile, shutil, stat
+        _backup_status["running"] = True
+        _backup_status["last_run"] = time.strftime("%Y-%m-%d %H:%M:%S")
+        try:
+            yield f"data: {json.dumps({'type': 'start', 'layer': layer})}\n\n"
+
+            ssh_key_path = os.getenv("PROXMOX_SSH_KEY", "/app/proxmox_key")
+            host = os.getenv("PROXMOX_HOST", "https://192.168.10.147:8006")
+            host_ip = host.replace("https://", "").replace("http://", "").split(":")[0]
+
+            # Temp-Key vorbereiten (wie _ssh_run)
+            tmp_key = tempfile.mktemp(prefix="backup_key_")
+            shutil.copy2(ssh_key_path, tmp_key)
+            os.chmod(tmp_key, stat.S_IRUSR)
+
+            cmd = [
+                "ssh", "-i", tmp_key, "-o", "StrictHostKeyChecking=no",
+                f"root@{host_ip}",
+                f"bash /opt/openclaw-proxmox/scripts/backup/backup-all.sh --layer {layer} 2>&1"
+            ]
+
+            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+            for line in proc.stdout:
+                line = line.rstrip()
+                yield f"data: {json.dumps({'type': 'log', 'line': line})}\n\n"
+
+            proc.wait()
+            os.unlink(tmp_key)
+
+            success = proc.returncode == 0
+            _backup_status["last_result"] = "ok" if success else "error"
+            yield f"data: {json.dumps({'type': 'done', 'success': success, 'returncode': proc.returncode})}\n\n"
+        except Exception as e:
+            _backup_status["last_result"] = "error"
+            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+        finally:
+            _backup_status["running"] = False
+
+    return StreamingResponse(stream_backup(), media_type="text/event-stream")
+
+
+@app.get("/admin/backup/status")
+async def admin_backup_status(_: None = Depends(require_admin)):
+    """Letzter Backup-Status."""
+    return _backup_status
 
 
 # ---------------------------------------------------------------------------

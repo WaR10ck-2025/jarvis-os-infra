@@ -73,7 +73,8 @@ def _set_step(conn, user_id: int, step: str) -> None:
 
 
 def provision_user(username: str, quota: str = "100G",
-                   storage_tier: str = "premium") -> dict:
+                   storage_tier: str = "premium",
+                   dashboard_type: str = "casaos") -> dict:
     """
     Legt einen neuen User an und provisioniert alle Ressourcen.
     Gibt User-Record als Dict zurück (inkl. api_key).
@@ -133,7 +134,7 @@ def provision_user(username: str, quota: str = "100G",
         _default_storage = os.getenv("PROXMOX_STORAGE", "local-lvm")
         storage = os.getenv(f"STORAGE_TIER_{storage_tier.upper()}", _default_storage)
 
-        if USER_DASHBOARD == "ugos":
+        if dashboard_type == "ugos":
             casaos_url, tailscale_auth_key = _provision_ugos_vm(
                 conn, user_id, username, casaos_lxc_id,
                 bridge, gateway, subnet, storage, smb_password, api_key, storage_tier, proxmox,
@@ -152,7 +153,7 @@ def provision_user(username: str, quota: str = "100G",
         try:
             authentik_pk = authentik_client.create_user(username)
             # UGOS: OIDC-Application für SSO-Login
-            if USER_DASHBOARD == "ugos":
+            if dashboard_type == "ugos":
                 ugos_mgmt_ip = get_user_mgmt_ip(user_id)
                 oidc_info = authentik_client.create_ugos_oidc_app(username, ugos_mgmt_ip)
                 if oidc_info:
@@ -366,10 +367,10 @@ def _provision_ugos_vm(
     _set_step(conn, user_id, "mounting_zfs_datasets")
     setup_nfs_export(username, subnet, proxmox)
 
-    # Schritt 6: VM starten + auf Guest Agent warten
+    # Schritt 6: VM starten + warten bis bereit
     _set_step(conn, user_id, "starting_casaos_lxc")
     proxmox.start_vm(vm_id)
-    proxmox.wait_for_vm_ready(vm_id, timeout=300)
+    proxmox.wait_for_vm_ready(vm_id, timeout=300, boot_wait=120)
 
     # NFS-Shares in VM mounten (via QEMU Guest Agent)
     try:

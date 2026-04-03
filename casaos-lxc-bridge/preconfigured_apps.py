@@ -83,6 +83,18 @@ PRECONFIGURED_APPS: list[dict] = [
         "lxc_id": None,
         "ip": None,
     },
+    {
+        "app_id": "Paperless-ngx",
+        "name": "Paperless-ngx",
+        "tagline": "Dokumenten-Management — scannen, indexieren, archivieren",
+        "description": "Verwandelt physische Dokumente in ein durchsuchbares Online-Archiv. OCR, automatische Tagging, E-Mail-Import.",
+        "icon": "https://raw.githubusercontent.com/IceWhaleTech/CasaOS-AppStore/main/Apps/Paperless-ngx/icon.png",
+        "category": "Documents",
+        "port": 8000,
+        "install_type": "dynamic",
+        "lxc_id": None,
+        "ip": None,
+    },
 ]
 
 
