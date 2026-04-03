@@ -58,6 +58,7 @@ services:
     volumes:
       - bridge-data:/data
       - /root/.ssh/proxmox_key:/app/proxmox_key:ro
+      - ./templates:/app/templates:ro
     networks:
       - openclaw-net
 

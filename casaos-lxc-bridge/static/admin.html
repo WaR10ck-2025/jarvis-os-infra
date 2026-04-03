@@ -694,8 +694,13 @@
           <td style="font-size:.8rem;color:var(--muted)">${age}</td>
           <td>
             <div class="row-actions" style="justify-content:flex-end">
-              <button class="btn btn-primary btn-sm" onclick="approveRequest(${r.id})">✓ Approve</button>
-              <button class="btn btn-danger btn-sm" onclick="denyRequest(${r.id})">✗</button>
+              ${r.status === 'blocked'
+                ? `<span style="color:#fca5a5;font-size:.8rem;margin-right:8px">🚫 Gesperrt</span>
+                   <button class="btn btn-sm" style="background:#166534;color:#86efac" onclick="unblockRequest(${r.id})" title="Entsperren">🔓 Entsperren</button>`
+                : `<button class="btn btn-primary btn-sm" onclick="approveRequest(${r.id})">✓ Approve</button>
+                   <button class="btn btn-danger btn-sm" onclick="denyRequest(${r.id})" title="Ablehnen (erneut anfragbar)">✗</button>
+                   <button class="btn btn-sm" style="background:#7f1d1d;color:#fca5a5" onclick="blockRequest(${r.id})" title="Dauerhaft sperren">🚫</button>`
+              }
             </div>
           </td>
         </tr>`;
@@ -712,10 +717,28 @@
   }
 
   async function denyRequest(id) {
-    if (!confirm('Anfrage ablehnen?')) return;
+    if (!confirm('Anfrage ablehnen? (User kann erneut anfragen)')) return;
     try {
       await apiFetch(`/admin/apps/requests/${id}/deny`, { method: 'POST' });
-      toast('Anfrage abgelehnt', 'ok');
+      toast('Abgelehnt — User kann erneut anfragen', 'ok');
+      await loadRequests();
+    } catch(e) { toast('Fehler: ' + e.message, 'err'); }
+  }
+
+  async function blockRequest(id) {
+    if (!confirm('App dauerhaft sperren? User kann NICHT erneut anfragen.')) return;
+    try {
+      await apiFetch(`/admin/apps/requests/${id}/block`, { method: 'POST' });
+      toast('Dauerhaft gesperrt', 'ok');
+      await loadRequests();
+    } catch(e) { toast('Fehler: ' + e.message, 'err'); }
+  }
+
+  async function unblockRequest(id) {
+    if (!confirm('App entsperren? User kann danach erneut anfragen.')) return;
+    try {
+      await apiFetch(`/admin/apps/requests/${id}/unblock`, { method: 'POST' });
+      toast('Entsperrt — User kann erneut anfragen', 'ok');
       await loadRequests();
     } catch(e) { toast('Fehler: ' + e.message, 'err'); }
   }

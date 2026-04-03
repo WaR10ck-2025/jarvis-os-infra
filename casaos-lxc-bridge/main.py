@@ -759,13 +759,28 @@ async def request_app(
     if user_id is None:
         raise HTTPException(400, detail="Nur für User mit API-Key verfügbar")
 
-    # Bereits laufende Anfragen prüfen
+    # Dauerhaft gesperrt?
+    blocked = conn.execute(
+        "SELECT id FROM app_requests WHERE user_id=? AND app_id=? AND status='blocked'",
+        (user_id, appid)
+    ).fetchone()
+    if blocked:
+        raise HTTPException(403, detail=f"'{appid}' wurde vom Admin dauerhaft gesperrt.")
+
+    # Bereits laufende Anfrage?
     existing = conn.execute(
         "SELECT id FROM app_requests WHERE user_id=? AND app_id=? AND status='pending'",
         (user_id, appid)
     ).fetchone()
     if existing:
         raise HTTPException(409, detail=f"Anfrage für '{appid}' bereits offen")
+
+    # Alte abgelehnte Anfragen entfernen (erneutes Anfragen erlauben)
+    conn.execute(
+        "DELETE FROM app_requests WHERE user_id=? AND app_id=? AND status='denied'",
+        (user_id, appid)
+    )
+    conn.commit()
 
     # App-Slots im User-Bereich prüfen
     user_row = conn.execute("SELECT * FROM users WHERE user_id=?", (user_id,)).fetchone()
@@ -810,7 +825,7 @@ async def admin_list_requests(_: None = Depends(require_admin)):
         SELECT r.*, u.username
         FROM app_requests r
         JOIN users u ON r.user_id = u.user_id
-        WHERE r.status = 'pending'
+        WHERE r.status IN ('pending', 'blocked')
         ORDER BY r.requested_at ASC
     """).fetchall()
     return {
@@ -874,6 +889,44 @@ async def admin_deny_request(
     conn.commit()
     if result.rowcount == 0:
         raise HTTPException(404, detail="Anfrage nicht gefunden oder bereits bearbeitet")
+    return {"success": True, "request_id": request_id}
+
+
+@app.post("/admin/apps/requests/{request_id}/block")
+async def admin_block_request(
+    request_id: int,
+    notes: str = Query("", description="Begründung"),
+    _: None = Depends(require_admin),
+):
+    """Sperrt eine App-Anfrage dauerhaft — User kann nicht erneut anfragen."""
+    from lxc_manager import _get_db
+    conn = _get_db()
+    result = conn.execute(
+        "UPDATE app_requests SET status='blocked', reviewed_at=CURRENT_TIMESTAMP, notes=? "
+        "WHERE id=? AND status IN ('pending','denied')",
+        (notes, request_id)
+    )
+    conn.commit()
+    if result.rowcount == 0:
+        raise HTTPException(404, detail="Anfrage nicht gefunden oder bereits bearbeitet")
+    return {"success": True, "request_id": request_id}
+
+
+@app.post("/admin/apps/requests/{request_id}/unblock")
+async def admin_unblock_request(
+    request_id: int,
+    _: None = Depends(require_admin),
+):
+    """Entsperrt eine gesperrte App-Anfrage — löscht den Eintrag, User kann erneut anfragen."""
+    from lxc_manager import _get_db
+    conn = _get_db()
+    result = conn.execute(
+        "DELETE FROM app_requests WHERE id=? AND status='blocked'",
+        (request_id,)
+    )
+    conn.commit()
+    if result.rowcount == 0:
+        raise HTTPException(404, detail="Gesperrte Anfrage nicht gefunden")
     return {"success": True, "request_id": request_id}
 
 

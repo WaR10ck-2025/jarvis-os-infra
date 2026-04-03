@@ -207,10 +207,39 @@ def resolve_umbrel(app_id: str, store_base: str = UMBREL_STORE_RAW) -> AppMeta:
     )
 
 
+TEMPLATES_DIR = os.path.join(os.path.dirname(__file__), "templates")
+
+
+def _resolve_local(app_id: str) -> AppMeta | None:
+    """Lädt App aus lokalem templates/ Verzeichnis (Fallback für Apps ohne Store)."""
+    compose_path = os.path.join(TEMPLATES_DIR, app_id, "docker-compose.yml")
+    if not os.path.isfile(compose_path):
+        return None
+    with open(compose_path, "r") as f:
+        compose_yaml = f.read()
+
+    # Metadaten aus preconfigured_apps holen
+    import preconfigured_apps
+    app_def = preconfigured_apps.get_by_id(app_id)
+    return AppMeta(
+        app_id=app_id,
+        name=app_def["name"] if app_def else app_id,
+        tagline=app_def.get("tagline", "") if app_def else "",
+        description=app_def.get("description", "") if app_def else "",
+        icon=app_def.get("icon", "") if app_def else "",
+        category=app_def.get("category", "Utilities") if app_def else "Utilities",
+        port=app_def.get("port", 80) if app_def else 80,
+        developer="OpenClaw Local Template",
+        compose_yaml=compose_yaml,
+        store_url="local",
+        store_type="local",
+    )
+
+
 def resolve(app_id: str) -> AppMeta:
     """
     Lädt App-Metadaten + docker-compose.yml für eine App-ID.
-    Suchreihenfolge: CasaOS Official → Umbrel Official → Custom Stores.
+    Suchreihenfolge: CasaOS Official → Umbrel Official → Custom Stores → Lokale Templates.
     """
     # 1. CasaOS Official Store
     try:
@@ -218,22 +247,29 @@ def resolve(app_id: str) -> AppMeta:
     except FileNotFoundError:
         pass
 
-    # 2. Umbrel Official Store (wenn enabled)
+    # 2. Umbrel Official Store (wenn enabled) — mit lowercase-Fallback
     if UMBREL_STORE_ENABLED:
-        try:
-            return resolve_umbrel(app_id, UMBREL_STORE_RAW)
-        except FileNotFoundError:
-            pass
+        for variant in dict.fromkeys([app_id, app_id.lower()]):
+            try:
+                return resolve_umbrel(variant, UMBREL_STORE_RAW)
+            except FileNotFoundError:
+                pass
 
-    # 3. Custom Stores
+    # 3. Custom Stores — mit lowercase-Fallback
     for store_type, store_url in _parse_custom_stores():
-        try:
-            if store_type == "umbrel":
-                return resolve_umbrel(app_id, store_url)
-            else:
-                return _resolve_casaos(app_id, store_url)
-        except FileNotFoundError:
-            continue
+        for variant in dict.fromkeys([app_id, app_id.lower()]):
+            try:
+                if store_type == "umbrel":
+                    return resolve_umbrel(variant, store_url)
+                else:
+                    return _resolve_casaos(variant, store_url)
+            except FileNotFoundError:
+                continue
+
+    # 4. Lokale Templates (eigene compose-Dateien für Apps ohne Store)
+    local = _resolve_local(app_id)
+    if local:
+        return local
 
     raise FileNotFoundError(f"App '{app_id}' in keinem Store gefunden.")
 

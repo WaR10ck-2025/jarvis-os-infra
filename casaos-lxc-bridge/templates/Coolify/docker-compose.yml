@@ -1,0 +1,45 @@
+version: "3.8"
+services:
+  coolify:
+    image: ghcr.io/coollabsio/coolify:latest
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - APP_ID=coolify
+      - APP_KEY=base64:changeme==
+      - DB_CONNECTION=pgsql
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_DATABASE=coolify
+      - DB_USERNAME=coolify
+      - DB_PASSWORD=coolify-secret
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    depends_on:
+      - postgres
+      - redis
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - data:/data/coolify
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: coolify
+      POSTGRES_USER: coolify
+      POSTGRES_PASSWORD: coolify-secret
+    volumes:
+      - db-data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - redis-data:/data
+
+volumes:
+  data:
+  db-data:
+  redis-data:

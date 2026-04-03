@@ -102,6 +102,7 @@
     .badge.pending     { background: #f59e0b22; color: var(--yellow); }
     .badge.approved    { background: #16a34a22; color: var(--green); }
     .badge.denied      { background: #ef444422; color: var(--red); }
+    .badge.blocked     { background: #ef444422; color: var(--red); }
 
     .btn {
       display: inline-flex; align-items: center; justify-content: center; gap: 6px;
@@ -248,7 +249,7 @@ function statusBadge(status) {
   const labels = {
     running: '● Läuft', stopped: '○ Gestoppt',
     installing: '⟳ Installiert…', error: '✗ Fehler',
-    pending: '⏳ Angefragt', approved: '✓ Genehmigt', denied: '✗ Abgelehnt',
+    pending: '⏳ Angefragt', approved: '✓ Genehmigt', denied: '✗ Abgelehnt', blocked: '🚫 Gesperrt',
   };
   return `<span class="badge ${status}">${labels[status] || status}</span>`;
 }
@@ -416,7 +417,10 @@ async function loadPendingRequests() {
     const data = await apiFetch('/bridge/apps/requests');
     const reqs = data.requests || [];
     pendingRequests = {};
-    reqs.forEach(r => { pendingRequests[r.app_id] = r.status; });
+    reqs.forEach(r => {
+      // denied = erneut anfragbar → nicht blockieren; blocked = dauerhaft gesperrt
+      if (r.status !== 'denied') pendingRequests[r.app_id] = r.status;
+    });
   } catch {
     // Endpoint existiert ggf. noch nicht — kein Fehler zeigen
     pendingRequests = {};

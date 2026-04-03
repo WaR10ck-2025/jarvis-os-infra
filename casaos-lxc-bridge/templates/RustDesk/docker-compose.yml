@@ -1,0 +1,25 @@
+version: "3.8"
+services:
+  rustdesk-server:
+    image: rustdesk/rustdesk-server:latest
+    restart: unless-stopped
+    ports:
+      - "21115:21115"
+      - "21116:21116"
+      - "21116:21116/udp"
+      - "21117:21117"
+      - "21118:21118"
+      - "21119:21119"
+    command: hbbs
+    volumes:
+      - data:/root
+
+  rustdesk-relay:
+    image: rustdesk/rustdesk-server:latest
+    restart: unless-stopped
+    command: hbbr
+    volumes:
+      - data:/root
+
+volumes:
+  data:

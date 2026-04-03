@@ -32,7 +32,7 @@ class AppRecord:
 
 def _get_db() -> sqlite3.Connection:
     os.makedirs(os.path.dirname(DB_PATH) if os.path.dirname(DB_PATH) else ".", exist_ok=True)
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=10)
     conn.row_factory = sqlite3.Row
 
     # --- apps-Tabelle (original) ---
@@ -313,7 +313,10 @@ def install_for_user(
                 pass  # Tailscale ist optional
 
         # Optional: Portainer Agent installieren + Endpoint registrieren
-        portainer_team_id = int(user.get("portainer_team_id") or 0)
+        try:
+            portainer_team_id = int(user["portainer_team_id"] or 0)
+        except (KeyError, TypeError):
+            portainer_team_id = 0
         if portainer_team_id:
             try:
                 import portainer_client
@@ -362,6 +365,50 @@ def _wait_for_network(ip: str, timeout: int = 60) -> None:
     raise TimeoutError(f"LXC {ip} nicht im Netzwerk nach {timeout}s")
 
 
+def _strip_lxc_incompatible(compose: str) -> str:
+    """
+    Entfernt LXC-inkompatible Einträge aus docker-compose.yml:
+    - devices: (z.B. /dev/dri)
+    - runtime: nvidia
+    - deploy: Block mit GPU-Reservierungen
+    - ipc: host (nicht immer nötig, aber problematisch)
+    """
+    lines = compose.splitlines(keepends=True)
+    result = []
+    skip_indent = -1  # Wenn > -1: überspringe Zeilen mit Einrückung > skip_indent
+
+    for line in lines:
+        stripped = line.lstrip()
+        indent = len(line) - len(line.lstrip())
+
+        # Skip-Modus: alles mit tieferer Einrückung überspringen
+        if skip_indent >= 0:
+            if indent > skip_indent or (not stripped or stripped.startswith('#')):
+                continue
+            else:
+                skip_indent = -1
+
+        # Einzelne Zeilen entfernen
+        if stripped.startswith('runtime:') and 'nvidia' in stripped:
+            continue
+        if stripped.startswith('ipc:') and 'host' in stripped:
+            continue
+
+        # Block-Entfernungen: devices:, deploy: (GPU resources)
+        if stripped.startswith('devices:'):
+            if '[' in stripped:  # Inline-Array: devices: ["/dev/dri"]
+                continue
+            skip_indent = indent
+            continue
+        if stripped.startswith('deploy:'):
+            skip_indent = indent
+            continue
+
+        result.append(line)
+
+    return ''.join(result)
+
+
 def _strip_app_proxy(compose: str) -> str:
     """Entfernt den app_proxy-Service-Block (Umbrel-spezifischer Reverse-Proxy)."""
     import re
@@ -406,4 +453,7 @@ def _patch_compose(meta: AppMeta, ip: str = "") -> str:
     compose = compose.replace("${PUID}", "0")
     compose = compose.replace("${PGID}", "0")
     compose = compose.replace("${TZ}", "Europe/Berlin")
+
+    # LXC-inkompatible Compose-Einträge entfernen
+    compose = _strip_lxc_incompatible(compose)
     return compose
