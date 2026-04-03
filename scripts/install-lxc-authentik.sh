@@ -13,10 +13,10 @@ set -e
 LXC_ID=125
 LXC_IP=192.168.10.125
 LXC_HOSTNAME=authentik-sso
-LXC_STORAGE=${PROXMOX_STORAGE:-local-zfs}
+LXC_STORAGE=${PROXMOX_STORAGE:-local-lvm}
 LXC_MEMORY=2048
 LXC_CORES=2
-PROXMOX_NODE=${PROXMOX_NODE:-pve}
+PROXMOX_NODE=${PROXMOX_NODE:-openclaw}
 
 # Debian 12 Template (ggf. anpassen)
 TEMPLATE="local:vztmpl/debian-12-standard_12.12-1_amd64.tar.zst"
@@ -73,7 +73,7 @@ services:
       - redis:/data
 
   server:
-    image: ghcr.io/goauthentik/server:2024.12
+    image: ghcr.io/goauthentik/server:2026.2
     restart: unless-stopped
     command: server
     environment:
@@ -91,7 +91,7 @@ services:
       - redis
 
   worker:
-    image: ghcr.io/goauthentik/server:2024.12
+    image: ghcr.io/goauthentik/server:2026.2
     restart: unless-stopped
     command: worker
     environment:
