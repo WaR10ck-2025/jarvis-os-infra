@@ -757,10 +757,10 @@
         <td style="font-size:.85rem;font-family:monospace;color:var(--muted)">${esc(u.subnet)}</td>
         <td>
           <div class="row-actions">
-            <button class="btn-icon" title="User App-Store Link kopieren"
-                    onclick="copy(location.origin+'/static/user-store.html?key=${esc(u.api_key)}', this)">
+            <a class="btn-icon" href="/static/user-store.html?key=${esc(u.api_key)}" target="_blank"
+               title="User App-Store öffnen" style="text-decoration:none">
               🛒
-            </button>
+            </a>
             <button class="btn-icon" title="Credentials anzeigen"
                     onclick="toggleDetails(${u.user_id})">
               ${isExpanded ? '🔼' : '👁'}
@@ -845,7 +845,8 @@
         <div class="key-val">${esc(ip)}</div>
         ${ip !== '—' ? `<button class="btn btn-ghost btn-sm" onclick="copy(${JSON.stringify(ip)}, this)">📋</button>
         <a href="${esc(openUrl)}" target="_blank" class="btn btn-ghost btn-sm" style="text-decoration:none" title="Dashboard">↗</a>
-        <a href="${esc(openUrl)}/#/app-store" target="_blank" class="btn btn-ghost btn-sm" style="text-decoration:none" title="App-Store">🛒</a>` : ''}
+        <a href="${esc(openUrl)}/#/app-store" target="_blank" class="btn btn-ghost btn-sm" style="text-decoration:none" title="CasaOS App-Store">🛒</a>
+        <a href="/static/user-store.html?key=${esc(u.api_key)}" target="_blank" class="btn btn-ghost btn-sm" style="text-decoration:none" title="OpenClaw App-Store">🏪</a>` : ''}
       </div>
       <div class="api-key-row">
         <label>API-Key</label>
@@ -926,7 +927,11 @@
                 </a>
                 <a class="link-btn" href="${esc(openUrl)}/#/app-store" target="_blank"
                    style="margin-top:6px">
-                  App-Store öffnen →
+                  CasaOS App-Store →
+                </a>
+                <a class="link-btn" href="/static/user-store.html?key=${esc(u.api_key)}" target="_blank"
+                   style="margin-top:6px">
+                  OpenClaw App-Store →
                 </a>
               </div>
               <div style="margin-top:8px;font-size:.72rem;color:var(--muted)">
