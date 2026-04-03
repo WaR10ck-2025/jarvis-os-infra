@@ -183,6 +183,17 @@
   </div>
 </section>
 
+<!-- Admin Apps -->
+<section id="sectionAdminApps">
+  <div class="section-header">
+    <span>🔒</span>
+    <h2>Infrastruktur</h2>
+    <span class="count" id="admin-apps-count">0</span>
+  </div>
+  <div class="app-grid" id="admin-apps-grid">
+  </div>
+</section>
+
 <!-- Meine Apps -->
 <section id="sectionMyApps">
   <div class="section-header">
@@ -293,41 +304,56 @@ function pollStatus(appId, scopedId) {
   }, 3000);
 }
 
+/* ── App-Karte rendern ─────────────────────────────────── */
+function renderAppCard(app) {
+  const appId = app.app_id;
+  const isInstalled = !!myApps[appId];
+  const isPending = !!pendingRequests[appId];
+  const url = isInstalled && myApps[appId].url ? myApps[appId].url : null;
+
+  let actionHtml;
+  if (isInstalled) {
+    actionHtml = `${statusBadge(myApps[appId].status)}
+      ${url ? `<a class="btn btn-ghost" href="${esc(url)}" target="_blank">Öffnen</a>` : ''}`;
+  } else if (app.admin_only) {
+    actionHtml = `<span class="badge" style="background:rgba(100,100,120,0.4);color:#9ca3af;font-size:0.75rem;padding:4px 10px;border-radius:6px">🔒 Nur Admin</span>`;
+  } else if (isPending) {
+    actionHtml = statusBadge(pendingRequests[appId]);
+  } else {
+    actionHtml = `<button class="btn btn-primary" onclick="requestApp('${esc(appId)}', this)">Anfragen</button>`;
+  }
+
+  return `
+    <div class="app-card">
+      ${iconEl(app.icon, app.name)}
+      <div>
+        <div class="app-name">${esc(app.name)}</div>
+        <div class="app-tagline">${esc(app.tagline || '')}</div>
+      </div>
+      <div class="card-actions">${actionHtml}</div>
+    </div>`;
+}
+
 /* ── Verfuegbare Apps laden ─────────────────────────────── */
 async function loadAvailable() {
   try {
     const data = await apiFetch('/bridge/preconfigured');
-    const apps = data.apps || [];
-    document.getElementById('available-count').textContent = apps.length;
+    const allApps = data.apps || [];
+    const userApps = allApps.filter(a => !a.admin_only);
+    const adminApps = allApps.filter(a => a.admin_only);
+
+    // User-Apps
+    document.getElementById('available-count').textContent = userApps.length;
     const grid = document.getElementById('available-grid');
-    if (!apps.length) { grid.innerHTML = '<div class="empty">Keine Apps verfügbar.</div>'; return; }
+    if (!userApps.length) { grid.innerHTML = '<div class="empty">Keine Apps verfügbar.</div>'; }
+    else { grid.innerHTML = userApps.map(app => renderAppCard(app)).join(''); }
 
-    grid.innerHTML = apps.map(app => {
-      const appId = app.app_id;
-      const isInstalled = !!myApps[appId];
-      const isPending = !!pendingRequests[appId];
-      const url = isInstalled && myApps[appId].url ? myApps[appId].url : null;
-
-      let actionHtml;
-      if (isInstalled) {
-        actionHtml = `${statusBadge(myApps[appId].status)}
-          ${url ? `<a class="btn btn-ghost" href="${esc(url)}" target="_blank">Öffnen</a>` : ''}`;
-      } else if (isPending) {
-        actionHtml = statusBadge(pendingRequests[appId]);
-      } else {
-        actionHtml = `<button class="btn btn-primary" onclick="requestApp('${esc(appId)}', this)">Anfragen</button>`;
-      }
-
-      return `
-        <div class="app-card">
-          ${iconEl(app.icon, app.name)}
-          <div>
-            <div class="app-name">${esc(app.name)}</div>
-            <div class="app-tagline">${esc(app.tagline || '')}</div>
-          </div>
-          <div class="card-actions">${actionHtml}</div>
-        </div>`;
-    }).join('');
+    // Admin/Infrastruktur-Apps
+    document.getElementById('admin-apps-count').textContent = adminApps.length;
+    const adminGrid = document.getElementById('admin-apps-grid');
+    if (!adminApps.length) { adminGrid.innerHTML = ''; }
+    else { adminGrid.innerHTML = adminApps.map(app => renderAppCard(app)).join(''); }
+    document.getElementById('sectionAdminApps').style.display = adminApps.length ? '' : 'none';
   } catch (e) {
     document.getElementById('available-grid').innerHTML =
       '<div class="empty">Fehler beim Laden.</div>';
@@ -360,6 +386,7 @@ async function loadMyApps() {
           </div>
           ${statusBadge(app.status)}
           ${app.url ? `<a class="btn btn-ghost" href="${esc(app.url)}" target="_blank">Öffnen</a>` : ''}
+          <button class="btn btn-ghost" style="color:#f87171" onclick="removeApp('${esc(baseId)}')" title="App deinstallieren">✕</button>
         </div>`;
     }).join('');
 
@@ -369,6 +396,18 @@ async function loadMyApps() {
       pollStatus(baseId, a.app_id);
     });
   } catch {}
+}
+
+/* ── App deinstallieren ────────────────────────────────── */
+async function removeApp(appId) {
+  if (!confirm(`"${appId}" wirklich deinstallieren? Der Container wird gelöscht.`)) return;
+  try {
+    await apiFetch(`/bridge/apps/remove?appid=${encodeURIComponent(appId)}`, { method: 'DELETE' });
+    toast('App deinstalliert', 'ok');
+    delete myApps[appId];
+    await loadMyApps();
+    await loadAvailable();
+  } catch(e) { toast('Fehler: ' + e.message, 'err'); }
 }
 
 /* ── Pending Requests laden ─────────────────────────────── */

@@ -236,11 +236,19 @@ def health():
 # ---------------------------------------------------------------------------
 
 @app.get("/bridge/preconfigured")
-async def get_preconfigured():
+async def get_preconfigured(request: Request):
     """Freigeschaltete Apps mit Live-Status aus der Bridge-DB."""
+    # Admin-Check: nur Admins sehen admin_only Apps
+    is_admin = False
+    api_key = request.headers.get("x-api-key", "") or request.query_params.get("admin_key", "")
+    if api_key and api_key == os.getenv("ADMIN_API_KEY", ""):
+        is_admin = True
+
     installed = {a.app_id: a for a in lxc_manager.list_apps()}
     result = []
     for app_def in preconfigured_apps.PRECONFIGURED_APPS:
+        if app_def.get("admin_only") and not is_admin:
+            continue
         entry = dict(app_def)
         if entry["app_id"] in installed:
             rec = installed[entry["app_id"]]
@@ -316,8 +324,11 @@ async def install_app(
 
 
 @app.delete("/bridge/remove")
-async def remove_app(appid: str = Query(..., description="App-ID")):
-    """Stoppt und zerstört den LXC-Container. Entfernt den CasaOS-Dashboard-Eintrag."""
+async def remove_app(
+    appid: str = Query(..., description="App-ID"),
+    _: None = Depends(require_admin),
+):
+    """Admin: Stoppt und zerstört den LXC-Container. Entfernt den CasaOS-Dashboard-Eintrag."""
     try:
         await asyncio.to_thread(casaos_client.unregister, appid)
     except Exception:
@@ -331,6 +342,48 @@ async def remove_app(appid: str = Query(..., description="App-ID")):
         raise HTTPException(500, detail=str(e))
 
     return {"success": True, "app_id": appid, "message": "LXC gestoppt und zerstört"}
+
+
+@app.delete("/bridge/apps/remove")
+async def user_remove_app(
+    appid: str = Query(..., description="App-ID aus dem Katalog"),
+    user=Depends(require_user_or_admin),
+):
+    """User: Eigene App deinstallieren (LXC zerstören + DB-Eintrag entfernen)."""
+    from lxc_manager import _get_db
+    user_id = user if isinstance(user, int) else None
+    if user_id is None:
+        raise HTTPException(400, detail="Nur für User mit API-Key verfügbar")
+
+    conn = _get_db()
+    # Finde die App mit User-Prefix (u{id}__{appid})
+    prefixed_id = f"u{user_id}__{appid}"
+    row = conn.execute(
+        "SELECT * FROM apps WHERE app_id=? AND user_id=?", (prefixed_id, user_id)
+    ).fetchone()
+    if not row:
+        # Fallback: ohne Prefix suchen
+        row = conn.execute(
+            "SELECT * FROM apps WHERE app_id=? AND user_id=?", (appid, user_id)
+        ).fetchone()
+    if not row:
+        raise HTTPException(404, detail=f"App '{appid}' nicht gefunden oder gehört dir nicht")
+
+    actual_app_id = row["app_id"]
+    try:
+        await asyncio.to_thread(lxc_manager.remove, actual_app_id)
+    except FileNotFoundError as e:
+        raise HTTPException(404, detail=str(e))
+    except RuntimeError as e:
+        raise HTTPException(500, detail=str(e))
+
+    # Auch zugehörige app_requests aufräumen
+    conn.execute(
+        "DELETE FROM app_requests WHERE user_id=? AND app_id=?", (user_id, appid)
+    )
+    conn.commit()
+
+    return {"success": True, "app_id": appid, "message": "App deinstalliert"}
 
 
 @app.get("/bridge/list")
@@ -694,6 +747,12 @@ async def request_app(
     - Genug freie Slots → direktes Installieren
     - Limit überschritten → Anfrage an Admin (pending)
     """
+    # Admin-only Apps: nur Admins dürfen installieren
+    import preconfigured_apps
+    app_def = preconfigured_apps.get_by_id(appid)
+    if app_def and app_def.get("admin_only"):
+        raise HTTPException(403, detail=f"'{appid}' kann nur vom Admin installiert werden.")
+
     from lxc_manager import _get_db
     conn = _get_db()
     user_id = user if isinstance(user, int) else None
@@ -722,20 +781,24 @@ async def request_app(
             meta = await asyncio.to_thread(app_resolver.resolve, appid)
             rec = await asyncio.to_thread(lxc_manager.install_for_user, meta, user_id)
             return {"status": "installed", "app_id": appid, "ip": rec.ip}
+        except FileNotFoundError:
+            # App nicht in Store → Anfrage an Admin (manuelles Setup nötig)
+            pass
         except Exception as e:
             raise HTTPException(500, detail=str(e))
-    else:
-        # Limit überschritten → Anfrage an Admin
-        conn.execute(
-            "INSERT INTO app_requests (user_id, app_id) VALUES (?, ?)",
-            (user_id, appid)
-        )
-        conn.commit()
-        return {
-            "status": "pending",
-            "message": f"Slot-Limit ({max_slots}) erreicht. Anfrage an Admin gesendet.",
-            "app_id": appid,
-        }
+
+    # Anfrage an Admin erstellen (Slot-Limit oder App nicht im Store)
+    conn.execute(
+        "INSERT INTO app_requests (user_id, app_id) VALUES (?, ?)",
+        (user_id, appid)
+    )
+    conn.commit()
+    reason = "App nicht automatisch verfügbar" if used_slots < max_slots else f"Slot-Limit ({max_slots}) erreicht"
+    return {
+        "status": "pending",
+        "message": f"{reason}. Anfrage an Admin gesendet.",
+        "app_id": appid,
+    }
 
 
 @app.get("/admin/apps/requests")
@@ -772,6 +835,17 @@ async def admin_approve_request(
 
     try:
         meta = await asyncio.to_thread(app_resolver.resolve, row["app_id"])
+    except FileNotFoundError:
+        # App nicht im Store → nur als approved markieren (manuelle Installation)
+        conn.execute(
+            "UPDATE app_requests SET status='approved', reviewed_at=CURRENT_TIMESTAMP, "
+            "notes='Manuelle Installation erforderlich' WHERE id=?", (request_id,)
+        )
+        conn.commit()
+        return {"success": True, "app_id": row["app_id"], "manual": True,
+                "message": f"App '{row['app_id']}' genehmigt — nicht automatisch installierbar."}
+
+    try:
         rec = await asyncio.to_thread(lxc_manager.install_for_user, meta, row["user_id"])
         conn.execute(
             "UPDATE app_requests SET status='approved', reviewed_at=CURRENT_TIMESTAMP "

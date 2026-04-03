@@ -705,8 +705,8 @@
 
   async function approveRequest(id) {
     try {
-      await apiFetch(`/admin/apps/requests/${id}/approve`, { method: 'POST' });
-      toast('App wird installiert', 'ok');
+      const res = await apiFetch(`/admin/apps/requests/${id}/approve`, { method: 'POST' });
+      toast(res.manual ? 'Genehmigt — manuelle Installation nötig' : 'App wird installiert', 'ok');
       await loadRequests();
     } catch(e) { toast('Fehler: ' + e.message, 'err'); }
   }
