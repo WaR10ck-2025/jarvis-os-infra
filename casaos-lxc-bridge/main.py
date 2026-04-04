@@ -977,7 +977,7 @@ async def admin_trigger_backup(
     from proxmox_client import ProxmoxClient
     proxmox = ProxmoxClient()
 
-    async def stream_backup():
+    def stream_backup():
         import subprocess, tempfile, shutil, stat
         _backup_status["running"] = True
         _backup_status["last_run"] = time.strftime("%Y-%m-%d %H:%M:%S")
@@ -996,12 +996,14 @@ async def admin_trigger_backup(
             cmd = [
                 "ssh", "-i", tmp_key, "-o", "StrictHostKeyChecking=no",
                 f"root@{host_ip}",
-                f"bash /opt/openclaw-proxmox/scripts/backup/backup-all.sh --layer {layer} 2>&1"
+                f"stdbuf -oL bash /opt/openclaw-proxmox/scripts/backup/backup-all.sh --layer {layer} 2>&1"
             ]
 
-            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
-            for line in proc.stdout:
+            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
+            for line in iter(proc.stdout.readline, ''):
                 line = line.rstrip()
+                if not line:
+                    continue
                 yield f"data: {json.dumps({'type': 'log', 'line': line})}\n\n"
 
             proc.wait()

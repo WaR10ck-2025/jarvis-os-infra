@@ -526,7 +526,25 @@
         <button class="btn btn-primary btn-sm" id="backupStartBtn" onclick="startBackup()">▶ Backup starten</button>
         <span id="backupMsg" style="font-size:0.8rem;color:var(--muted)"></span>
       </div>
-      <pre id="backupLog" style="display:none;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:12px;font-size:0.75rem;max-height:400px;overflow-y:auto;white-space:pre-wrap;color:var(--fg);margin:0"></pre>
+      <!-- Fortschrittsanzeige -->
+      <div id="backupProgress" style="display:none;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 18px;margin-bottom:8px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+          <span style="font-size:0.85rem;font-weight:600;color:var(--fg)" id="backupPhaseTitle">Backup wird vorbereitet…</span>
+          <span style="font-size:0.75rem;color:var(--muted)" id="backupTimer">00:00</span>
+        </div>
+        <div style="height:6px;background:var(--border);border-radius:3px;overflow:hidden;margin-bottom:10px">
+          <div id="backupProgressBar" style="height:100%;width:0%;background:var(--accent);border-radius:3px;transition:width 0.5s ease"></div>
+        </div>
+        <div id="backupPhases" style="display:flex;gap:12px;font-size:0.72rem">
+          <span id="bp-layer1" style="color:var(--muted)">○ Config</span>
+          <span id="bp-layer3" style="color:var(--muted)">○ App-Daten</span>
+          <span id="bp-layer2" style="color:var(--muted)">○ vzdump</span>
+        </div>
+      </div>
+      <details id="backupLogDetails" style="margin-bottom:4px">
+        <summary style="font-size:0.75rem;color:#64748b;cursor:pointer;user-select:none">Live-Log</summary>
+        <pre id="backupLog" style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:12px;font-size:0.75rem;max-height:300px;overflow-y:auto;white-space:pre-wrap;color:var(--fg);margin:4px 0 0 0"></pre>
+      </details>
     </div>
     <details style="margin-top:10px">
       <summary style="font-size:0.75rem;color:#64748b;cursor:pointer;user-select:none">Debug-Info</summary>
@@ -1574,16 +1592,87 @@
     } catch {}
   }
 
+  let _backupTimerInterval = null;
+
+  function _startBackupTimer() {
+    const start = Date.now();
+    const el = document.getElementById('backupTimer');
+    _backupTimerInterval = setInterval(() => {
+      const s = Math.floor((Date.now() - start) / 1000);
+      const m = Math.floor(s / 60);
+      el.textContent = `${String(m).padStart(2,'0')}:${String(s % 60).padStart(2,'0')}`;
+    }, 1000);
+  }
+  function _stopBackupTimer() {
+    if (_backupTimerInterval) { clearInterval(_backupTimerInterval); _backupTimerInterval = null; }
+  }
+
+  function _updateBackupPhase(line) {
+    const title = document.getElementById('backupPhaseTitle');
+    const bar = document.getElementById('backupProgressBar');
+    const phases = { layer1: 'bp-layer1', layer3: 'bp-layer3', layer2: 'bp-layer2' };
+
+    // Phasen-Erkennung aus backup-all.sh Output
+    if (line.includes('Layer 1: Config')) {
+      title.textContent = 'Layer 1 — Config-Backup…';
+      bar.style.width = '10%';
+      document.getElementById(phases.layer1).innerHTML = '<span style="color:#fbbf24">◉</span> Config';
+    } else if (line.includes('Layer 1 abgeschlossen')) {
+      bar.style.width = '20%';
+      document.getElementById(phases.layer1).innerHTML = '<span style="color:#4ade80">✓</span> Config';
+    } else if (line.includes('Layer 1') && line.includes('fehlgeschlagen')) {
+      document.getElementById(phases.layer1).innerHTML = '<span style="color:#f87171">✗</span> Config';
+    } else if (line.includes('Layer 3: App-Data')) {
+      title.textContent = 'Layer 2 — App-Daten-Backup…';
+      bar.style.width = '30%';
+      document.getElementById(phases.layer3).innerHTML = '<span style="color:#fbbf24">◉</span> App-Daten';
+    } else if (line.includes('Layer 3 abgeschlossen')) {
+      bar.style.width = '50%';
+      document.getElementById(phases.layer3).innerHTML = '<span style="color:#4ade80">✓</span> App-Daten';
+    } else if (line.includes('Layer 3') && line.includes('fehlgeschlagen')) {
+      document.getElementById(phases.layer3).innerHTML = '<span style="color:#f87171">✗</span> App-Daten';
+    } else if (line.includes('Layer 2: vzdump')) {
+      title.textContent = 'Layer 3 — vzdump-Backup (LXC/VM)…';
+      bar.style.width = '55%';
+      document.getElementById(phases.layer2).innerHTML = '<span style="color:#fbbf24">◉</span> vzdump';
+    } else if (line.includes('Layer 2 abgeschlossen')) {
+      bar.style.width = '95%';
+      document.getElementById(phases.layer2).innerHTML = '<span style="color:#4ade80">✓</span> vzdump';
+    } else if (line.includes('Layer 2') && line.includes('fehlgeschlagen')) {
+      document.getElementById(phases.layer2).innerHTML = '<span style="color:#f87171">✗</span> vzdump';
+    } else if (line.includes('Backup abgeschlossen')) {
+      bar.style.width = '100%';
+      const timer = document.getElementById('backupTimer').textContent;
+      title.textContent = `Backup abgeschlossen (${timer})`;
+    }
+    // vzdump Sub-Fortschritt (pro Container/VM)
+    if (line.includes('INFO: starting new backup job') || line.includes('vzdump')) {
+      const vmMatch = line.match(/(?:CT|VM)\s+(\d+)/);
+      if (vmMatch) title.textContent = `Layer 3 — vzdump: CT/VM ${vmMatch[1]}…`;
+    }
+  }
+
   async function startBackup() {
     const btn = document.getElementById('backupStartBtn');
     const msg = document.getElementById('backupMsg');
     const log = document.getElementById('backupLog');
+    const progress = document.getElementById('backupProgress');
     const layer = document.getElementById('backupLayer').value;
 
     btn.disabled = true;
-    msg.textContent = 'Backup wird gestartet…';
-    log.style.display = 'block';
+    msg.textContent = '';
     log.textContent = '';
+    progress.style.display = 'block';
+    document.getElementById('backupProgressBar').style.width = '0%';
+    document.getElementById('backupPhaseTitle').textContent = 'Backup wird vorbereitet…';
+    document.getElementById('bp-layer1').innerHTML = '○ Config';
+    document.getElementById('bp-layer3').innerHTML = '○ App-Daten';
+    document.getElementById('bp-layer2').innerHTML = '○ vzdump';
+    // Nur relevante Phasen anzeigen
+    document.getElementById('bp-layer1').style.display = layer.includes('1') || layer === 'all' ? '' : 'none';
+    document.getElementById('bp-layer3').style.display = layer.includes('3') || layer === 'all' ? '' : 'none';
+    document.getElementById('bp-layer2').style.display = layer.includes('2') || layer === 'all' ? '' : 'none';
+    _startBackupTimer();
     _bkDbgClear(`Backup starten (layer=${layer})`);
     _bkDbg(`USB mounted: ${_usbMounted}`);
 
@@ -1614,18 +1703,30 @@
           if (ev.type === 'log') {
             log.textContent += ev.line + '\n';
             log.scrollTop = log.scrollHeight;
+            _updateBackupPhase(ev.line);
           } else if (ev.type === 'done') {
-            msg.textContent = ev.success ? '✓ Backup erfolgreich!' : '✗ Backup fehlgeschlagen';
-            msg.style.color = ev.success ? '#4ade80' : '#f87171';
+            _stopBackupTimer();
+            const timer = document.getElementById('backupTimer').textContent;
+            if (ev.success) {
+              msg.textContent = `\u2713 Backup erfolgreich (${timer})`;
+              msg.style.color = '#4ade80';
+              document.getElementById('backupProgressBar').style.background = '#4ade80';
+            } else {
+              msg.textContent = '\u2717 Backup fehlgeschlagen';
+              msg.style.color = '#f87171';
+              document.getElementById('backupProgressBar').style.background = '#f87171';
+            }
           } else if (ev.type === 'error') {
-            msg.textContent = '✗ ' + ev.message;
+            _stopBackupTimer();
+            msg.textContent = '\u2717 ' + ev.message;
             msg.style.color = '#f87171';
           } else if (ev.type === 'start') {
-            msg.textContent = `Layer ${ev.layer} wird gesichert…`;
+            document.getElementById('backupPhaseTitle').textContent = `Backup Layer ${ev.layer} gestartet…`;
           }
         }
       }
     } catch (e) {
+      _stopBackupTimer();
       msg.textContent = '\u2717 ' + e.message;
       msg.style.color = '#f87171';
       _bkDbg(`FEHLER: ${e.name || 'Error'}: ${e.message || e}`);

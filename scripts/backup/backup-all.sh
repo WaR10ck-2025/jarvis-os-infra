@@ -9,7 +9,7 @@
 #   backup-all.sh --layer 2          # Nur Layer 2 (vzdump)
 #   backup-all.sh --layer all        # Alle Layer
 
-set -e
+set -eo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
@@ -52,7 +52,7 @@ log "═════════════════════════
 # ── Layer 1: Config-Backup ───────────────────────────────────────────────────
 if echo "$RUN_LAYERS" | grep -q "1"; then
   log "► Layer 1: Config-Backup..."
-  if bash "${SCRIPT_DIR}/backup-config.sh" >> "$LOG_FILE" 2>&1; then
+  if stdbuf -oL bash "${SCRIPT_DIR}/backup-config.sh" 2>&1 | stdbuf -oL tee -a "$LOG_FILE"; then
     LAYER1_STATUS="ok"
     log_ok "Layer 1 abgeschlossen"
   else
@@ -64,7 +64,7 @@ fi
 # ── Layer 3: App-Data-Backup (vor Layer 2 — schneller, LXCs laufen) ──────────
 if echo "$RUN_LAYERS" | grep -q "3"; then
   log "► Layer 3: App-Data-Backup..."
-  if bash "${SCRIPT_DIR}/backup-appdata.sh" >> "$LOG_FILE" 2>&1; then
+  if stdbuf -oL bash "${SCRIPT_DIR}/backup-appdata.sh" 2>&1 | stdbuf -oL tee -a "$LOG_FILE"; then
     LAYER3_STATUS="ok"
     log_ok "Layer 3 abgeschlossen"
   else
@@ -76,7 +76,7 @@ fi
 # ── Layer 2: vzdump (zuletzt — zeitintensiv, kann LXCs kurz einfrieren) ──────
 if echo "$RUN_LAYERS" | grep -q "2"; then
   log "► Layer 2: vzdump-Backup..."
-  if bash "${SCRIPT_DIR}/backup-vzdump.sh" >> "$LOG_FILE" 2>&1; then
+  if stdbuf -oL bash "${SCRIPT_DIR}/backup-vzdump.sh" 2>&1 | stdbuf -oL tee -a "$LOG_FILE"; then
     LAYER2_STATUS="ok"
     log_ok "Layer 2 abgeschlossen"
   else
