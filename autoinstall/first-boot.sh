@@ -116,36 +116,28 @@ fi
 
 # ── Schritt 1c: BOOT-MENÜ (Restore vs. Fresh-Install) ──────────────────────
 #
-# Sucht nach Backup-Daten in zwei Stufen:
-#   1. Dedizierte Partition (Label=OPENCLAW-BAK) — Standard + Ventoy Modus C
-#   2. Ventoy-Partition (Label=Ventoy) mit openclaw-backups/ Unterordner — Ventoy Modus B
+# Sucht nach Backup-Partition (Label=Backup).
+# Unterstützt: Lexar F35 Pro (Fingerprint) und Lexar SL280 — beide Label "Backup".
 #
 # Zeigt Menü mit Backup-Info + 30s Countdown.
 # Headless (stdin=/dev/null): read schlägt sofort fehl → Standard greift.
 
 BACKUP_USB_MOUNT="/mnt/backup-usb"
 
-# ── USB-Backup-Quelle suchen (2-stufig) ─────────────────────────────────────
+# ── USB-Backup-Quelle suchen ─────────────────────────────────────────────────
 find_backup_source() {
   mkdir -p "$BACKUP_USB_MOUNT"
 
-  # Stufe 1: Dedizierte OPENCLAW-BAK Partition
   local dev
-  dev=$(blkid -L "OPENCLAW-BAK" 2>/dev/null || true)
+  dev=$(blkid -L "Backup" 2>/dev/null || true)
   if [ -n "$dev" ]; then
-    mountpoint -q "$BACKUP_USB_MOUNT" || mount "$dev" "$BACKUP_USB_MOUNT" 2>/dev/null || true
-    if [ -d "${BACKUP_USB_MOUNT}/openclaw-backups" ]; then
-      echo "$dev"
-      return 0
+    # Stale-Mount-Schutz: obersten Mount prüfen
+    local top_mount
+    top_mount=$(findmnt -n -o SOURCE "$BACKUP_USB_MOUNT" 2>/dev/null | tail -1)
+    if [ -z "$top_mount" ] || [ "$top_mount" != "$dev" ]; then
+      mount "$dev" "$BACKUP_USB_MOUNT" 2>/dev/null || true
     fi
-    umount "$BACKUP_USB_MOUNT" 2>/dev/null || true
-  fi
-
-  # Stufe 2: Ventoy-Partition mit openclaw-backups/ Ordner
-  dev=$(blkid -L "Ventoy" 2>/dev/null || true)
-  if [ -n "$dev" ]; then
-    mountpoint -q "$BACKUP_USB_MOUNT" || mount "$dev" "$BACKUP_USB_MOUNT" 2>/dev/null || true
-    if [ -d "${BACKUP_USB_MOUNT}/openclaw-backups/dump" ]; then
+    if [ -d "${BACKUP_USB_MOUNT}/openclaw-backups" ]; then
       echo "$dev"
       return 0
     fi

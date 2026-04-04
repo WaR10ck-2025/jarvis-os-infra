@@ -1,7 +1,7 @@
 #!/bin/bash
 # restore-hook.sh — OpenClaw Disaster Recovery Engine
 #
-# Läuft im Kontext von first-boot.sh wenn OPENCLAW-BAK USB erkannt wird.
+# Läuft im Kontext von first-boot.sh wenn Backup-USB erkannt wird (Label: Backup).
 # Stellt alle LXCs, VMs und App-Daten von der USB-Festplatte wieder her.
 #
 # Ablauf:
@@ -17,7 +17,7 @@
 set -e
 
 LOG_FILE="/var/log/openclaw-first-boot.log"
-USB_LABEL="OPENCLAW-BAK"
+USB_LABEL="Backup"
 USB_MOUNT="/mnt/backup-usb"
 BACKUP_BASE="${USB_MOUNT}/openclaw-backups"
 REPO_DIR="/opt/openclaw-proxmox"
@@ -36,37 +36,24 @@ log_section() {
 
 RESTORE_ERRORS=0
 
-# ── Phase 1: USB mounten (2-stufige Erkennung) ────────────────────────────
+# ── Phase 1: USB mounten ──────────────────────────────────────────────────
 log_section "Phase 1: Backup-USB mounten"
 mkdir -p "$USB_MOUNT"
 
-# Stufe 1: Dedizierte OPENCLAW-BAK Partition (Modus A / Ventoy Modus C)
-USB_DEV=$(blkid -L "OPENCLAW-BAK" 2>/dev/null || true)
+USB_DEV=$(blkid -L "$USB_LABEL" 2>/dev/null || true)
 if [ -n "$USB_DEV" ]; then
-  log "  Stufe 1: OPENCLAW-BAK Partition gefunden: $USB_DEV"
+  log "  Backup-Partition gefunden: $USB_DEV (Label: $USB_LABEL)"
 else
-  # Stufe 2: Ventoy-Partition mit openclaw-backups/ Unterordner (Modus B)
-  log "  Stufe 1: kein OPENCLAW-BAK — suche Ventoy-Partition..."
-  VENTOY_DEV=$(blkid -L "Ventoy" 2>/dev/null || true)
-  if [ -n "$VENTOY_DEV" ]; then
-    mountpoint -q "$USB_MOUNT" || mount "$VENTOY_DEV" "$USB_MOUNT" 2>/dev/null || true
-    if [ -d "${USB_MOUNT}/openclaw-backups/dump" ]; then
-      USB_DEV="$VENTOY_DEV"
-      log "  Stufe 2: Ventoy-Partition mit openclaw-backups/ gefunden: $USB_DEV"
-    else
-      umount "$USB_MOUNT" 2>/dev/null || true
-      log_err "Ventoy gefunden aber kein openclaw-backups/dump/ — Restore abgebrochen"
-      exit 1
-    fi
-  fi
-fi
-
-if [ -z "$USB_DEV" ]; then
-  log_err "Kein Backup-USB gefunden (weder OPENCLAW-BAK noch Ventoy+openclaw-backups/) — Restore abgebrochen"
+  log_err "Kein Backup-USB gefunden (Label: $USB_LABEL) — Restore abgebrochen"
   exit 1
 fi
 
-mountpoint -q "$USB_MOUNT" || mount "$USB_DEV" "$USB_MOUNT"
+# Stale-Mount-Schutz: obersten Mount prüfen
+TOP_MOUNT=$(findmnt -n -o SOURCE "$USB_MOUNT" 2>/dev/null | tail -1)
+if [ -z "$TOP_MOUNT" ] || [ "$TOP_MOUNT" != "$USB_DEV" ]; then
+  [ -n "$TOP_MOUNT" ] && log "  ⚠  Mount-Mismatch: $USB_MOUNT → $TOP_MOUNT statt $USB_DEV"
+  mount "$USB_DEV" "$USB_MOUNT"
+fi
 log_ok "USB gemountet: $USB_DEV → $USB_MOUNT"
 log "  Inhalte: $(du -sh "${BACKUP_BASE}" 2>/dev/null | cut -f1) gesamt"
 

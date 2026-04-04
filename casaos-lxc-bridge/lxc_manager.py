@@ -454,6 +454,11 @@ def _patch_compose(meta: AppMeta, ip: str = "") -> str:
     compose = compose.replace("${PGID}", "0")
     compose = compose.replace("${TZ}", "Europe/Berlin")
 
+    # Store-Platzhalter für IP/Host ersetzen (z.B. BigBear: [YOUR_IP])
+    if ip:
+        compose = compose.replace("[YOUR_IP]", ip)
+        compose = compose.replace("YOUR_IP", ip)
+
     # LXC-inkompatible Compose-Einträge entfernen
     compose = _strip_lxc_incompatible(compose)
     return compose

@@ -6,9 +6,9 @@
 #
 # ── Drei Modi ──────────────────────────────────────────────────────────────
 #
-#  Modus A — Standard (dd + neue ext4-Partition)
+#  Modus A — Standard (dd + neue exFAT-Partition)
 #    Leeren USB-Stick neu partitionieren:
-#    Partition 1: bootbares ISO  |  Partition 2: ext4, OPENCLAW-BAK
+#    Partition 1: bootbares ISO  |  Partition 2: exFAT, Backup
 #
 #    create-rescue-usb.sh --iso proxmox-openclaw.iso --device /dev/sdX
 #
@@ -19,7 +19,7 @@
 #    create-rescue-usb.sh --ventoy --device /dev/sdX --iso proxmox-openclaw.iso
 #
 #  Modus C — Ventoy + dedizierte Partition
-#    ISO in Ventoy-Partition + neue ext4-Partition 3 für Backup-Daten
+#    ISO in Ventoy-Partition + neue exFAT-Partition 3 für Backup-Daten
 #
 #    create-rescue-usb.sh --ventoy --add-partition --device /dev/sdX
 #
@@ -27,7 +27,7 @@
 #   --iso <Pfad>          ISO-Datei (Modus A + B)
 #   --device <Gerät>      USB Block-Device (z.B. /dev/sdb)
 #   --ventoy              Ventoy-Modus aktivieren (B oder C)
-#   --add-partition       Zusätzliche OPENCLAW-BAK Partition erstellen (Modus C)
+#   --add-partition       Zusätzliche Backup-Partition erstellen (Modus C)
 #   --copy-from <Pfad>    Backup-Daten von hier auf USB kopieren
 #                         (z.B. /mnt/backup-usb wenn aktueller Backup-USB gemountet)
 
@@ -168,10 +168,10 @@ if [ "$VENTOY_MODE" = "true" ] && [ "$ADD_PARTITION" = "false" ]; then
 fi
 
 # ══════════════════════════════════════════════════════════════════════════
-#  MODUS C — VENTOY + NEUE OPENCLAW-BAK PARTITION
+#  MODUS C — VENTOY + NEUE BACKUP PARTITION
 # ══════════════════════════════════════════════════════════════════════════
 if [ "$VENTOY_MODE" = "true" ] && [ "$ADD_PARTITION" = "true" ]; then
-  hdr "Modus C: Ventoy-USB + neue OPENCLAW-BAK Partition"
+  hdr "Modus C: Ventoy-USB + neue Backup-Partition"
 
   # Prüfen ob GPT (Ventoy verwendet GPT)
   PARTITION_TABLE=$(parted -s "$DEVICE" print 2>/dev/null | grep "Partition Table" | awk '{print $3}')
@@ -186,7 +186,7 @@ if [ "$VENTOY_MODE" = "true" ] && [ "$ADD_PARTITION" = "true" ]; then
   read -rp "  Fortfahren? [j/N] " CONFIRM
   [[ ! "$CONFIRM" =~ ^[jJyY]$ ]] && { echo "  Abgebrochen."; exit 0; }
 
-  parted -s "$DEVICE" mkpart primary ext4 "${START_SECTOR}s" 100%
+  parted -s "$DEVICE" mkpart primary "${START_SECTOR}s" 100%
   partprobe "$DEVICE"
   sleep 3
 
@@ -195,8 +195,8 @@ if [ "$VENTOY_MODE" = "true" ] && [ "$ADD_PARTITION" = "true" ]; then
   BACKUP_PART="/dev/$BACKUP_PART"
   [ ! -b "$BACKUP_PART" ] && err "Neue Partition nicht gefunden"
 
-  mkfs.ext4 -L "OPENCLAW-BAK" -q "$BACKUP_PART"
-  ok "Partition erstellt + formatiert: $BACKUP_PART (OPENCLAW-BAK)"
+  mkfs.exfat -L "Backup" "$BACKUP_PART"
+  ok "Partition erstellt + formatiert: $BACKUP_PART (Backup, exFAT)"
 
   # Backup-Daten kopieren
   if [ -n "$COPY_FROM" ]; then
@@ -210,7 +210,7 @@ if [ "$VENTOY_MODE" = "true" ] && [ "$ADD_PARTITION" = "true" ]; then
   PART_SIZE=$(lsblk -no SIZE "$BACKUP_PART" 2>/dev/null || echo "?")
   echo ""
   ok "Modus C abgeschlossen!"
-  echo "  Partition 3: $BACKUP_PART ($PART_SIZE, Label=OPENCLAW-BAK)"
+  echo "  Partition 3: $BACKUP_PART ($PART_SIZE, Label=Backup)"
   exit 0
 fi
 
@@ -248,7 +248,7 @@ partprobe "$DEVICE"
 sleep 3
 
 # Schritt 3: Letzten ISO-Sektor + Freiraum ermitteln
-hdr "Schritt 3/4: Partition 2 (OPENCLAW-BAK) erstellen..."
+hdr "Schritt 3/4: Partition 2 (Backup) erstellen..."
 LAST_ISO_SECTOR=$(sfdisk -d "$DEVICE" 2>/dev/null | grep "start=" | awk -F',' '{
   for(i=1;i<=NF;i++) if($i~"start=") {gsub(/.*start=/,"",$i); gsub(/[^0-9].*/,"",$i); start=$i}
   if($i~"size=") {gsub(/.*size=/,"",$i); gsub(/[^0-9].*/,"",$i); size=$i}
@@ -263,7 +263,7 @@ fi
 START_SECTOR=$((LAST_ISO_SECTOR + 2048))  # 2048 Sektoren Alignment-Puffer
 info "Neue Partition ab Sektor $START_SECTOR"
 
-parted -s "$DEVICE" mkpart primary ext4 "${START_SECTOR}s" 100%
+parted -s "$DEVICE" mkpart primary "${START_SECTOR}s" 100%
 partprobe "$DEVICE"
 sleep 3
 
@@ -276,8 +276,8 @@ else
   err "Partition 2 nicht gefunden nach partprobe"
 fi
 
-mkfs.ext4 -L "OPENCLAW-BAK" -q "$BACKUP_PART"
-ok "Partition 2 erstellt: $BACKUP_PART (OPENCLAW-BAK ext4)"
+mkfs.exfat -L "Backup" "$BACKUP_PART"
+ok "Partition 2 erstellt: $BACKUP_PART (Backup exFAT)"
 
 # Schritt 4: Backup-Daten kopieren (optional)
 hdr "Schritt 4/4: Backup-Daten..."
@@ -309,7 +309,7 @@ ok "Rescue-USB fertig!"
 echo ""
 echo "  Partitionen:"
 echo "    Partition 1: ${DEVICE}1  ($PART1_SIZE) — Bootbares Proxmox-ISO"
-echo "    Partition 2: $BACKUP_PART  ($PART2_SIZE) — OPENCLAW-BAK (Backup-Daten)"
+echo "    Partition 2: $BACKUP_PART  ($PART2_SIZE) — Backup (exFAT)"
 echo ""
 echo "  Nächste Schritte:"
 echo "    1. USB einstecken + von USB booten (BIOS/UEFI: Boot-Order prüfen)"

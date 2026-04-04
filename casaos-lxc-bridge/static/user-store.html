@@ -213,6 +213,7 @@ const API_KEY = new URLSearchParams(location.search).get('key');
 let myApps = {};
 let pendingRequests = {};
 let pollingTimers = {};
+let preconfiguredIndex = {};  // lowercase app_id → {name, icon, ...}
 
 /* ── Auth-Check ─────────────────────────────────────────── */
 if (!API_KEY) {
@@ -264,6 +265,10 @@ function iconEl(icon, name) {
 
 function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
 
+function proxyUrl(baseId) {
+  return `${location.origin}/proxy/${encodeURIComponent(baseId)}/?key=${encodeURIComponent(API_KEY)}`;
+}
+
 /* ── App anfragen ───────────────────────────────────────── */
 async function requestApp(appId, btn) {
   btn.disabled = true;
@@ -308,14 +313,14 @@ function pollStatus(appId, scopedId) {
 /* ── App-Karte rendern ─────────────────────────────────── */
 function renderAppCard(app) {
   const appId = app.app_id;
-  const isInstalled = !!myApps[appId];
-  const isPending = !!pendingRequests[appId];
-  const url = isInstalled && myApps[appId].url ? myApps[appId].url : null;
-
+  const appKey = appId.toLowerCase();
+  const isInstalled = !!myApps[appKey];
+  const isPending = !!pendingRequests[appKey];
   let actionHtml;
   if (isInstalled) {
-    actionHtml = `${statusBadge(myApps[appId].status)}
-      ${url ? `<a class="btn btn-ghost" href="${esc(url)}" target="_blank">Öffnen</a>` : ''}`;
+    const url = proxyUrl(appId);
+    actionHtml = `${statusBadge(myApps[appKey].status)}
+      <a class="btn btn-ghost" href="${esc(url)}" target="_blank">Öffnen</a>`;
   } else if (app.admin_only) {
     actionHtml = `<span class="badge" style="background:rgba(100,100,120,0.4);color:#9ca3af;font-size:0.75rem;padding:4px 10px;border-radius:6px">🔒 Nur Admin</span>`;
   } else if (isPending) {
@@ -340,6 +345,9 @@ async function loadAvailable() {
   try {
     const data = await apiFetch('/bridge/preconfigured');
     const allApps = data.apps || [];
+    // Index für Icon/Name-Lookup (case-insensitive)
+    preconfiguredIndex = {};
+    allApps.forEach(a => { preconfiguredIndex[a.app_id.toLowerCase()] = a; });
     const userApps = allApps.filter(a => !a.admin_only);
     const adminApps = allApps.filter(a => a.admin_only);
 
@@ -366,10 +374,10 @@ async function loadMyApps() {
   try {
     const data = await apiFetch('/bridge/list');
     const apps = data.apps || [];
-    // Index nach base app_id (ohne u{id}__ prefix)
+    // Index nach base app_id (ohne u{id}__ prefix, lowercase für case-insensitiven Vergleich)
     myApps = {};
     apps.forEach(a => {
-      const baseId = a.app_id.includes('__') ? a.app_id.split('__')[1] : a.app_id;
+      const baseId = (a.app_id.includes('__') ? a.app_id.split('__')[1] : a.app_id).toLowerCase();
       myApps[baseId] = a;
     });
     document.getElementById('my-apps-count').textContent = apps.length;
@@ -378,15 +386,18 @@ async function loadMyApps() {
 
     list.innerHTML = apps.map(app => {
       const baseId = app.app_id.includes('__') ? app.app_id.split('__')[1] : app.app_id;
+      const meta = preconfiguredIndex[baseId.toLowerCase()];
+      const displayName = meta ? meta.name : baseId;
+      const icon = meta ? meta.icon : null;
       return `
         <div class="installed-row">
-          <div class="app-icon-fallback" style="font-size:1rem">📦</div>
+          ${iconEl(icon, displayName)}
           <div class="installed-info">
-            <div class="name">${esc(baseId)}</div>
+            <div class="name">${esc(displayName)}</div>
             <div class="url">${esc(app.url)} · LXC ${app.lxc_id}</div>
           </div>
           ${statusBadge(app.status)}
-          ${app.url ? `<a class="btn btn-ghost" href="${esc(app.url)}" target="_blank">Öffnen</a>` : ''}
+          <a class="btn btn-ghost" href="${esc(proxyUrl(baseId))}" target="_blank">Öffnen</a>
           <button class="btn btn-ghost" style="color:#f87171" onclick="removeApp('${esc(baseId)}')" title="App deinstallieren">✕</button>
         </div>`;
     }).join('');
@@ -419,7 +430,11 @@ async function loadPendingRequests() {
     pendingRequests = {};
     reqs.forEach(r => {
       // denied = erneut anfragbar → nicht blockieren; blocked = dauerhaft gesperrt
-      if (r.status !== 'denied') pendingRequests[r.app_id] = r.status;
+      // approved ohne installierte App = manuelle Installation war nötig → erneut anfragbar
+      const key = r.app_id.toLowerCase();
+      if (r.status === 'denied') return;
+      if (r.status === 'approved' && !myApps[key]) return;
+      pendingRequests[key] = r.status;
     });
   } catch {
     // Endpoint existiert ggf. noch nicht — kein Fehler zeigen
@@ -437,6 +452,12 @@ async function loadUserInfo() {
 
 /* ── Reload ─────────────────────────────────────────────── */
 async function reload() {
+  // Index zuerst laden (für Icons/Namen in "Meine Apps")
+  try {
+    const data = await apiFetch('/bridge/preconfigured');
+    preconfiguredIndex = {};
+    (data.apps || []).forEach(a => { preconfiguredIndex[a.app_id.toLowerCase()] = a; });
+  } catch {}
   await loadMyApps();
   await loadPendingRequests();
   await loadAvailable();

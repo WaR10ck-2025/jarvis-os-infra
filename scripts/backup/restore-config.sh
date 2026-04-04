@@ -53,7 +53,13 @@ if [ -n "$RESTORE_FILE" ]; then
 
 elif [ "$FROM" = "usb" ]; then
   USB_DEV=$(blkid -L "$BACKUP_USB_LABEL" 2>/dev/null || true)
-  [ -n "$USB_DEV" ] && (mountpoint -q "$BACKUP_USB_MOUNT" || mount "$USB_DEV" "$BACKUP_USB_MOUNT")
+  if [ -n "$USB_DEV" ]; then
+    # Stale-Mount-Schutz: obersten Mount prüfen
+    TOP_MOUNT=$(findmnt -n -o SOURCE "$BACKUP_USB_MOUNT" 2>/dev/null | tail -1)
+    if [ -z "$TOP_MOUNT" ] || [ "$TOP_MOUNT" != "$USB_DEV" ]; then
+      mount "$USB_DEV" "$BACKUP_USB_MOUNT" 2>/dev/null || true
+    fi
+  fi
   SEARCH_DIR="${BACKUP_BASE_DIR_USB}/configs"
   if [ -n "$RESTORE_DATE" ]; then
     BACKUP_ARCHIVE=$(find "$SEARCH_DIR/$RESTORE_DATE" -name "*.tar.gz.age" 2>/dev/null | head -1)

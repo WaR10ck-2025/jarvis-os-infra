@@ -24,6 +24,9 @@ Endpunkte:
   DELETE /admin/users/{id}                  User + alle Ressourcen entfernen
   POST   /admin/backup?layer=all             Backup auslösen (SSE Live-Log)
   GET    /admin/backup/status                Letzter Backup-Status
+  GET    /admin/backup/usb-status            USB-Stick + Backup-Partition Status
+  GET    /admin/backup/usb-contents          Backup-Inhalte + Größen pro Layer
+  POST   /admin/backup/usb-cleanup           Retention-Bereinigung (SSE Live-Log)
 """
 from __future__ import annotations
 import asyncio
@@ -37,8 +40,9 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Query, Depends, Request
 import io
 import zipfile
-from fastapi.responses import JSONResponse, RedirectResponse, PlainTextResponse, Response
+from fastapi.responses import JSONResponse, RedirectResponse, PlainTextResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
+import httpx
 import app_resolver
 import lxc_manager
 import casaos_client
@@ -775,9 +779,9 @@ async def request_app(
     if existing:
         raise HTTPException(409, detail=f"Anfrage für '{appid}' bereits offen")
 
-    # Alte abgelehnte Anfragen entfernen (erneutes Anfragen erlauben)
+    # Alte abgelehnte/genehmigte Anfragen entfernen (erneutes Anfragen erlauben)
     conn.execute(
-        "DELETE FROM app_requests WHERE user_id=? AND app_id=? AND status='denied'",
+        "DELETE FROM app_requests WHERE user_id=? AND app_id=? AND status IN ('denied','approved')",
         (user_id, appid)
     )
     conn.commit()
@@ -1021,6 +1025,341 @@ async def admin_backup_status(_: None = Depends(require_admin)):
     return _backup_status
 
 
+@app.get("/admin/backup/usb-status")
+async def admin_backup_usb_status(_: None = Depends(require_admin)):
+    """
+    Prüft ob der Backup-USB eingesteckt und die Partition entsperrt/gemountet ist.
+    Führt blkid + df auf dem Proxmox-Host via SSH aus.
+    """
+    from proxmox_client import ProxmoxClient
+    proxmox = ProxmoxClient()
+
+    check_script = (
+        'DEV=$(blkid -L "Backup" 2>/dev/null || true); '
+        'if [ -n "$DEV" ]; then '
+        '  echo "DEVICE:$DEV"; '
+        '  DISK=$(echo "$DEV" | sed "s/[0-9]*$//"); '
+        '  VENDOR=$(udevadm info --query=property "$DISK" 2>/dev/null | grep "^ID_VENDOR=" | cut -d= -f2 | xargs); '
+        '  MODEL=$(udevadm info --query=property "$DISK" 2>/dev/null | grep "^ID_MODEL=" | cut -d= -f2 | sed "s/_/ /g" | xargs); '
+        '  echo "VENDOR:${VENDOR:-unknown}"; '
+        '  echo "MODEL:${MODEL:-unknown}"; '
+        '  TOP_MOUNT=$(findmnt -n -o SOURCE /mnt/backup-usb 2>/dev/null | tail -1); '
+        '  if [ "$TOP_MOUNT" = "$DEV" ]; then '
+        '    echo "MOUNTED:yes"; '
+        '    df -B1 /mnt/backup-usb 2>/dev/null | tail -1 | awk \'{print "SPACE:" $2 ":" $3 ":" $4}\'; '
+        '  elif [ -n "$TOP_MOUNT" ]; then '
+        '    echo "MOUNTED:stale:$TOP_MOUNT"; '
+        '  else '
+        '    echo "MOUNTED:no"; '
+        '  fi; '
+        'else '
+        '  echo "DEVICE:none"; '
+        'fi'
+    )
+
+    try:
+        result = proxmox._ssh_run(check_script, timeout=15)
+        lines = result.stdout.strip().splitlines()
+
+        status = {
+            "connected": False,
+            "mounted": False,
+            "stale_mount": None,
+            "device": None,
+            "vendor": None,
+            "model": None,
+            "label": "Backup",
+            "total_gb": 0,
+            "used_gb": 0,
+            "free_gb": 0,
+        }
+
+        for line in lines:
+            if line.startswith("DEVICE:") and line != "DEVICE:none":
+                status["connected"] = True
+                status["device"] = line.split(":", 1)[1]
+            elif line.startswith("VENDOR:"):
+                v = line.split(":", 1)[1]
+                if v != "unknown":
+                    status["vendor"] = v
+            elif line.startswith("MODEL:"):
+                m = line.split(":", 1)[1]
+                if m != "unknown":
+                    status["model"] = m
+            elif line.startswith("MOUNTED:yes"):
+                status["mounted"] = True
+            elif line.startswith("MOUNTED:stale:"):
+                status["stale_mount"] = line.split(":", 2)[2]
+            elif line.startswith("SPACE:"):
+                parts = line.split(":")
+                if len(parts) >= 4:
+                    try:
+                        status["total_gb"] = round(int(parts[1]) / (1024**3), 1)
+                        status["used_gb"] = round(int(parts[2]) / (1024**3), 1)
+                        status["free_gb"] = round(int(parts[3]) / (1024**3), 1)
+                    except ValueError:
+                        pass
+
+        return status
+    except Exception as e:
+        logger.warning(f"USB-Status-Check fehlgeschlagen: {e}")
+        return {"connected": False, "mounted": False, "device": None,
+                "label": "Backup", "total_gb": 0, "used_gb": 0, "free_gb": 0,
+                "error": str(e)}
+
+
+@app.get("/admin/backup/usb-contents")
+async def admin_backup_usb_contents(_: None = Depends(require_admin)):
+    """
+    Listet Backup-Inhalte auf dem USB-Stick auf:
+    - configs/ (Layer 1): Anzahl Tage, Gesamtgröße
+    - dump/ (Layer 2): Anzahl Dateien pro LXC/VM, Gesamtgröße
+    - appdata/ (Layer 3): Anzahl Tage, Gesamtgröße
+    Gibt auch die Retention-Einstellungen aus backup.conf zurück.
+    """
+    from proxmox_client import ProxmoxClient
+    proxmox = ProxmoxClient()
+
+    scan_script = (
+        'source /opt/openclaw/config/backup.conf 2>/dev/null; '
+        'BASE="${BACKUP_BASE_DIR_USB:-/mnt/backup-usb/openclaw-backups}"; '
+        'echo "RETENTION_CONFIG:${RETENTION_CONFIG_DAYS:-30}"; '
+        'echo "RETENTION_VZDUMP:${RETENTION_VZDUMP_COUNT:-3}"; '
+        'echo "RETENTION_APPDATA:${RETENTION_APPDATA_DAYS:-14}"; '
+        # configs: Datum-Verzeichnisse zählen + Größe
+        'if [ -d "$BASE/configs" ]; then '
+        '  CCOUNT=$(find "$BASE/configs" -maxdepth 1 -mindepth 1 -type d | wc -l); '
+        '  CSIZE=$(du -sb "$BASE/configs" 2>/dev/null | cut -f1); '
+        '  COLDEST=$(find "$BASE/configs" -maxdepth 1 -mindepth 1 -type d -name "????-??-??" | sort | head -1 | xargs basename 2>/dev/null); '
+        '  echo "CONFIGS:$CCOUNT:$CSIZE:$COLDEST"; '
+        'else echo "CONFIGS:0:0:"; fi; '
+        # dump: vzdump-Dateien nach VMID gruppieren
+        'if [ -d "$BASE/dump" ]; then '
+        '  DSIZE=$(du -sb "$BASE/dump" 2>/dev/null | cut -f1); '
+        '  DCOUNT=$(find "$BASE/dump" -name "vzdump-*.zst" 2>/dev/null | wc -l); '
+        '  echo "DUMP:$DCOUNT:$DSIZE"; '
+        # Pro VMID: Typ, ID, Anzahl, Größe
+        '  for F in $(find "$BASE/dump" -name "vzdump-*.zst" 2>/dev/null '
+        '    | sed "s/.*vzdump-\\([a-z]*\\)-\\([0-9]*\\)-.*/\\1:\\2/" | sort -u); do '
+        '    VMTYPE=$(echo "$F" | cut -d: -f1); VMID=$(echo "$F" | cut -d: -f2); '
+        '    EXT="tar.zst"; [ "$VMTYPE" = "qemu" ] && EXT="vma.zst"; '
+        '    VFILES=$(ls -1 "$BASE/dump/vzdump-${VMTYPE}-${VMID}-"*.${EXT} 2>/dev/null); '
+        '    VCOUNT=$(echo "$VFILES" | grep -c . 2>/dev/null); '
+        '    VSIZE=$(echo "$VFILES" | xargs du -cb 2>/dev/null | tail -1 | cut -f1); '
+        '    echo "DUMP_VM:${VMTYPE}:${VMID}:${VCOUNT}:${VSIZE}"; '
+        '  done; '
+        'else echo "DUMP:0:0"; fi; '
+        # appdata: Datum-Verzeichnisse zählen + Größe
+        'if [ -d "$BASE/appdata" ]; then '
+        '  ACOUNT=$(find "$BASE/appdata" -maxdepth 1 -mindepth 1 -type d | wc -l); '
+        '  ASIZE=$(du -sb "$BASE/appdata" 2>/dev/null | cut -f1); '
+        '  AOLDEST=$(find "$BASE/appdata" -maxdepth 1 -mindepth 1 -type d -name "????-??-??" | sort | head -1 | xargs basename 2>/dev/null); '
+        '  echo "APPDATA:$ACOUNT:$ASIZE:$AOLDEST"; '
+        'else echo "APPDATA:0:0:"; fi'
+    )
+
+    try:
+        result = proxmox._ssh_run(scan_script, timeout=30)
+        lines = result.stdout.strip().splitlines()
+
+        contents = {
+            "retention": {"config_days": 30, "vzdump_count": 3, "appdata_days": 14},
+            "configs": {"count": 0, "size_bytes": 0, "oldest": None},
+            "dump": {"count": 0, "size_bytes": 0, "vms": []},
+            "appdata": {"count": 0, "size_bytes": 0, "oldest": None},
+        }
+
+        for line in lines:
+            if line.startswith("RETENTION_CONFIG:"):
+                contents["retention"]["config_days"] = int(line.split(":")[1])
+            elif line.startswith("RETENTION_VZDUMP:"):
+                contents["retention"]["vzdump_count"] = int(line.split(":")[1])
+            elif line.startswith("RETENTION_APPDATA:"):
+                contents["retention"]["appdata_days"] = int(line.split(":")[1])
+            elif line.startswith("CONFIGS:"):
+                parts = line.split(":")
+                contents["configs"]["count"] = int(parts[1])
+                contents["configs"]["size_bytes"] = int(parts[2]) if parts[2] else 0
+                contents["configs"]["oldest"] = parts[3] if len(parts) > 3 and parts[3] else None
+            elif line.startswith("DUMP:"):
+                parts = line.split(":")
+                contents["dump"]["count"] = int(parts[1])
+                contents["dump"]["size_bytes"] = int(parts[2]) if parts[2] else 0
+            elif line.startswith("DUMP_VM:"):
+                parts = line.split(":")
+                contents["dump"]["vms"].append({
+                    "type": parts[1],        # lxc | qemu
+                    "vmid": int(parts[2]),
+                    "backups": int(parts[3]),
+                    "size_bytes": int(parts[4]) if parts[4] else 0,
+                })
+            elif line.startswith("APPDATA:"):
+                parts = line.split(":")
+                contents["appdata"]["count"] = int(parts[1])
+                contents["appdata"]["size_bytes"] = int(parts[2]) if parts[2] else 0
+                contents["appdata"]["oldest"] = parts[3] if len(parts) > 3 and parts[3] else None
+
+        return contents
+    except Exception as e:
+        logger.warning(f"USB-Contents-Scan fehlgeschlagen: {e}")
+        raise HTTPException(500, detail=f"USB-Scan fehlgeschlagen: {e}")
+
+
+@app.post("/admin/backup/usb-cleanup")
+async def admin_backup_usb_cleanup(
+    _: None = Depends(require_admin),
+):
+    """
+    Führt Retention-Bereinigung auf dem USB-Stick aus:
+    - configs: älter als RETENTION_CONFIG_DAYS löschen
+    - dump: mehr als RETENTION_VZDUMP_COUNT pro LXC/VM löschen
+    - appdata: älter als RETENTION_APPDATA_DAYS löschen
+    Gibt SSE-Stream mit Live-Fortschritt zurück.
+    """
+    from proxmox_client import ProxmoxClient
+    proxmox = ProxmoxClient()
+
+    cleanup_script = r'''
+source /opt/openclaw/config/backup.conf 2>/dev/null
+BASE="${BACKUP_BASE_DIR_USB:-/mnt/backup-usb/openclaw-backups}"
+
+# Vorher-Größe
+BEFORE=$(du -sb "$BASE" 2>/dev/null | cut -f1)
+echo "STATUS:start:$BEFORE"
+
+# ── Layer 1: Configs — älter als RETENTION_CONFIG_DAYS ──
+echo "LAYER:1:configs"
+if [ -d "$BASE/configs" ]; then
+  DELETED=0
+  find "$BASE/configs/" -maxdepth 2 -name "*.tar.gz*" \
+    -mtime "+${RETENTION_CONFIG_DAYS:-30}" 2>/dev/null | while read -r F; do
+    SIZE=$(stat -c%s "$F" 2>/dev/null || echo 0)
+    rm -f "$F"
+    echo "DELETE:configs:$(basename "$F"):$SIZE"
+  done
+  find "$BASE/configs/" -maxdepth 1 -mindepth 1 -type d \
+    -empty -delete 2>/dev/null || true
+  echo "DONE:configs"
+else
+  echo "SKIP:configs:Verzeichnis nicht vorhanden"
+fi
+
+# ── Layer 2: Dump — nur letzte RETENTION_VZDUMP_COUNT behalten ──
+echo "LAYER:2:dump"
+if [ -d "$BASE/dump" ]; then
+  RETENTION="${RETENTION_VZDUMP_COUNT:-3}"
+  for VMTYPE in lxc qemu; do
+    EXT="tar.zst"; [ "$VMTYPE" = "qemu" ] && EXT="vma.zst"
+    for VMID in $(find "$BASE/dump" -name "vzdump-${VMTYPE}-*-*.${EXT}" 2>/dev/null \
+        | sed "s/.*vzdump-[a-z]*-\([0-9]*\)-.*/\1/" | sort -u); do
+      BACKUPS=$(ls -t "$BASE/dump/vzdump-${VMTYPE}-${VMID}-"*.${EXT} 2>/dev/null)
+      COUNT=$(echo "$BACKUPS" | wc -l)
+      if [ "$COUNT" -gt "$RETENTION" ]; then
+        echo "$BACKUPS" | tail -n "+$((RETENTION + 1))" | while read -r OLD; do
+          SIZE=$(stat -c%s "$OLD" 2>/dev/null || echo 0)
+          rm -f "$OLD"
+          rm -f "${OLD%.${EXT}}.log"
+          echo "DELETE:dump:$(basename "$OLD"):$SIZE"
+        done
+      fi
+    done
+  done
+  # Alte Manifeste aufräumen (älter als 30 Tage)
+  find "$BASE/dump" -name "manifest-*.sha256" -mtime +30 -delete 2>/dev/null || true
+  echo "DONE:dump"
+else
+  echo "SKIP:dump:Verzeichnis nicht vorhanden"
+fi
+
+# ── Layer 3: Appdata — älter als RETENTION_APPDATA_DAYS ──
+echo "LAYER:3:appdata"
+if [ -d "$BASE/appdata" ]; then
+  RETENTION_DAYS="${RETENTION_APPDATA_DAYS:-14}"
+  find "$BASE/appdata/" -maxdepth 1 -mindepth 1 -type d \
+    -name "????-??-??" | sort | head -n "-${RETENTION_DAYS}" | while read -r OLD_DIR; do
+    SIZE=$(du -sb "$OLD_DIR" 2>/dev/null | cut -f1)
+    rm -rf "$OLD_DIR"
+    echo "DELETE:appdata:$(basename "$OLD_DIR"):${SIZE:-0}"
+  done
+  echo "DONE:appdata"
+else
+  echo "SKIP:appdata:Verzeichnis nicht vorhanden"
+fi
+
+# Nachher-Größe
+AFTER=$(du -sb "$BASE" 2>/dev/null | cut -f1)
+echo "STATUS:done:$BEFORE:$AFTER"
+'''
+
+    async def stream_cleanup():
+        import subprocess, tempfile, shutil, stat as stat_mod
+
+        ssh_key_path = os.getenv("PROXMOX_SSH_KEY", "/app/proxmox_key")
+        host = os.getenv("PROXMOX_HOST", "https://192.168.10.147:8006")
+        host_ip = host.replace("https://", "").replace("http://", "").split(":")[0]
+
+        tmp_key = tempfile.mktemp(prefix="cleanup_key_")
+        shutil.copy2(ssh_key_path, tmp_key)
+        os.chmod(tmp_key, stat_mod.S_IRUSR)
+
+        try:
+            yield f"data: {json.dumps({'type': 'start'})}\n\n"
+
+            cmd = [
+                "ssh", "-i", tmp_key, "-o", "StrictHostKeyChecking=no",
+                f"root@{host_ip}",
+                cleanup_script
+            ]
+
+            proc = subprocess.Popen(
+                cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True
+            )
+
+            deleted_total = 0
+            freed_bytes = 0
+
+            for line in proc.stdout:
+                line = line.rstrip()
+                if line.startswith("STATUS:start:"):
+                    yield f"data: {json.dumps({'type': 'log', 'line': 'Aufräumen gestartet...'})}\n\n"
+                elif line.startswith("LAYER:"):
+                    parts = line.split(":")
+                    yield f"data: {json.dumps({'type': 'layer', 'layer': parts[1], 'name': parts[2]})}\n\n"
+                    yield f"data: {json.dumps({'type': 'log', 'line': f'Layer {parts[1]}: {parts[2]} bereinigen...'})}\n\n"
+                elif line.startswith("DELETE:"):
+                    parts = line.split(":")
+                    size = int(parts[3]) if len(parts) > 3 and parts[3] else 0
+                    freed_bytes += size
+                    deleted_total += 1
+                    size_mb = round(size / (1024**2), 1)
+                    yield f"data: {json.dumps({'type': 'delete', 'category': parts[1], 'file': parts[2], 'size_bytes': size, 'line': f'  ✗ {parts[2]} ({size_mb} MB)'})}\n\n"
+                elif line.startswith("DONE:"):
+                    cat = line.split(":")[1]
+                    yield f"data: {json.dumps({'type': 'log', 'line': f'  ✓ {cat} bereinigt'})}\n\n"
+                elif line.startswith("SKIP:"):
+                    parts = line.split(":", 2)
+                    yield f"data: {json.dumps({'type': 'log', 'line': f'  ⊘ {parts[1]}: {parts[2]}'})}\n\n"
+                elif line.startswith("STATUS:done:"):
+                    parts = line.split(":")
+                    before = int(parts[2]) if parts[2] else 0
+                    after = int(parts[3]) if len(parts) > 3 and parts[3] else 0
+                    freed_bytes = before - after
+                    freed_mb = round(freed_bytes / (1024**2), 1)
+                    freed_gb = round(freed_bytes / (1024**3), 2)
+                    yield f"data: {json.dumps({'type': 'done', 'success': True, 'deleted': deleted_total, 'freed_bytes': freed_bytes, 'freed_mb': freed_mb, 'freed_gb': freed_gb})}\n\n"
+
+            proc.wait()
+            if proc.returncode != 0:
+                yield f"data: {json.dumps({'type': 'error', 'message': f'Script exit code: {proc.returncode}'})}\n\n"
+
+        except Exception as e:
+            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+        finally:
+            os.unlink(tmp_key)
+
+    return StreamingResponse(stream_cleanup(), media_type="text/event-stream")
+
+
 # ---------------------------------------------------------------------------
 # OIDC / Authentik SSO — Admin-Dashboard Login
 # ---------------------------------------------------------------------------
@@ -1041,18 +1380,28 @@ _OIDC_TOKEN_URL  = f"{_authentik_base}/application/o/token/"
 _oidc_states: dict[str, float] = {}   # state → expires_ts
 
 
+def _get_origin(request: Request) -> str:
+    """Leitet die Origin-URL aus dem Request ab (Proxy-aware via X-Forwarded-*)."""
+    proto = request.headers.get("x-forwarded-proto", request.url.scheme)
+    host = request.headers.get("x-forwarded-host", request.headers.get("host", ""))
+    if host:
+        return f"{proto}://{host}"
+    return BRIDGE_URL
+
+
 @app.get("/auth/login")
-async def auth_login():
+async def auth_login(request: Request):
     """Startet den OIDC-Login-Flow → redirect zu Authentik."""
     if not OIDC_CLIENT_ID or not _authentik_base:
         raise HTTPException(501, detail="OIDC nicht konfiguriert (OIDC_CLIENT_ID fehlt)")
     import secrets as _sec
+    origin = _get_origin(request)
     state = _sec.token_urlsafe(24)
-    _oidc_states[state] = time.time() + 600   # 10 min gültig
+    _oidc_states[state] = (time.time() + 600, origin)   # 10 min gültig + origin merken
     params = _urlparse.urlencode({
         "response_type": "code",
         "client_id":     OIDC_CLIENT_ID,
-        "redirect_uri":  f"{BRIDGE_URL}/auth/callback",
+        "redirect_uri":  f"{origin}/auth/callback",
         "scope":         "openid email profile",
         "state":         state,
     })
@@ -1062,16 +1411,19 @@ async def auth_login():
 @app.get("/auth/callback")
 async def auth_callback(request: Request, code: str = Query(...), state: str = Query(...)):
     """OIDC-Callback: tauscht Code gegen Token, setzt Session-Cookie."""
-    # CSRF-State validieren
-    expires = _oidc_states.pop(state, None)
-    if not expires or time.time() > expires:
+    # CSRF-State validieren (state enthält jetzt (expires, origin))
+    entry = _oidc_states.pop(state, None)
+    if not entry:
         raise HTTPException(400, detail="Ungültiger oder abgelaufener OIDC-State")
+    expires, origin = entry if isinstance(entry, tuple) else (entry, BRIDGE_URL)
+    if time.time() > expires:
+        raise HTTPException(400, detail="OIDC-State abgelaufen")
 
     # Code gegen Token tauschen
     token_body = _urlparse.urlencode({
         "grant_type":    "authorization_code",
         "code":          code,
-        "redirect_uri":  f"{BRIDGE_URL}/auth/callback",
+        "redirect_uri":  f"{origin}/auth/callback",
         "client_id":     OIDC_CLIENT_ID,
         "client_secret": OIDC_CLIENT_SECRET,
     }).encode()
@@ -1183,11 +1535,63 @@ def _wn_db():
             credential_id BLOB  NOT NULL UNIQUE,
             public_key  BLOB    NOT NULL,
             sign_count  INTEGER NOT NULL DEFAULT 0,
+            aaguid      TEXT    DEFAULT NULL,
+            device_name TEXT    DEFAULT NULL,
             created_at  DATETIME DEFAULT CURRENT_TIMESTAMP
         )
     """)
+    # Migration: aaguid + device_name Spalten hinzufügen (falls Tabelle schon existiert)
+    try:
+        conn.execute("ALTER TABLE webauthn_credentials ADD COLUMN aaguid TEXT DEFAULT NULL")
+    except Exception:
+        pass
+    try:
+        conn.execute("ALTER TABLE webauthn_credentials ADD COLUMN device_name TEXT DEFAULT NULL")
+    except Exception:
+        pass
     conn.commit()
     return conn
+
+
+# AAGUID → Hersteller/Modell-Zuordnung (bekannte Security Keys)
+_AAGUID_DB: dict[str, dict] = {
+    # ── YubiKey 5 Series (USB-A) ──
+    "cb69481e-8ff7-4039-93ec-0a2729a154a8": {"vendor": "Yubico", "model": "YubiKey 5 NFC"},
+    "2fc0579f-8113-47ea-b116-bb5a8db9202a": {"vendor": "Yubico", "model": "YubiKey 5 NFC"},
+    "d7781e5d-e353-46aa-afe2-3ca49f13332a": {"vendor": "Yubico", "model": "YubiKey 5 NFC"},
+    "ee882879-721c-4913-9775-3dfcce97072a": {"vendor": "Yubico", "model": "YubiKey 5 Nano"},
+    "fa2b99dc-9e39-4257-8f92-4a30d23c4118": {"vendor": "Yubico", "model": "YubiKey 5 NFC FIPS"},
+    "73bb0cd4-e502-49b8-9c6f-b59445bf720b": {"vendor": "Yubico", "model": "YubiKey 5Ci FIPS"},
+    # ── YubiKey 5 Series (USB-C) ──
+    "b92c3f9a-c014-4056-887f-140a2501163b": {"vendor": "Yubico", "model": "YubiKey 5C NFC"},
+    "85203421-48f9-4355-9bc8-8a53846e5083": {"vendor": "Yubico", "model": "YubiKey 5C Nano"},
+    "c5ef55ff-ad9a-4b9f-b580-adebafe026d0": {"vendor": "Yubico", "model": "YubiKey 5Ci"},
+    "a4e9fc6d-4cbe-4758-b8ba-37598bb5bbaa": {"vendor": "Yubico", "model": "YubiKey 5C"},
+    # ── YubiKey Bio ──
+    "d8522d9f-575b-4866-88a9-ba99fa02f35b": {"vendor": "Yubico", "model": "YubiKey Bio"},
+    "83c47309-aabb-4108-8470-8be838b573cb": {"vendor": "Yubico", "model": "YubiKey Bio FIDO"},
+    # ── Security Key by Yubico ──
+    "f8a011f3-8c0a-4d15-8006-17111f9edc7d": {"vendor": "Yubico", "model": "Security Key NFC"},
+    "6d44ba9b-f6ec-2e49-b930-0c8fe920cb73": {"vendor": "Yubico", "model": "Security Key"},
+    "149a2021-8ef6-4133-96b8-81f8d5b7f1f5": {"vendor": "Yubico", "model": "Security Key NFC"},
+    # ── Google Titan ──
+    "42b4fb4a-2866-43b2-9bf7-6c6669c2e5d3": {"vendor": "Google", "model": "Titan Security Key"},
+    # ── Feitian ──
+    "3e22415d-7fdf-4ea4-8a0c-dd60c4249b9d": {"vendor": "Feitian", "model": "BioPass FIDO2"},
+    "77010bd7-212a-4fc9-b236-d2ca5e9d4084": {"vendor": "Feitian", "model": "ePass FIDO2"},
+    # ── SoloKeys ──
+    "8876631b-d4a0-427f-5773-0ec71c9e0279": {"vendor": "SoloKeys", "model": "Solo 2"},
+    # ── Nitrokey ──
+    "2c0df832-92de-4be1-8412-88a8f074df4a": {"vendor": "Nitrokey", "model": "Nitrokey 3"},
+}
+
+
+def _resolve_aaguid(aaguid_hex: str) -> dict:
+    """Löst AAGUID zu Vendor/Model auf. Fallback: 'Security Key'."""
+    info = _AAGUID_DB.get(aaguid_hex)
+    if info:
+        return info
+    return {"vendor": "Unknown", "model": "Security Key"}
 
 
 @app.get("/auth/webauthn/enabled")
@@ -1208,7 +1612,7 @@ async def webauthn_register_begin(_: None = Depends(require_admin)):
         import base64
 
         rp = PublicKeyCredentialRpEntity(id=WEBAUTHN_RP_ID, name=WEBAUTHN_RP_NAME)
-        server = Fido2Server(rp)
+        server = Fido2Server(rp, attestation="direct")
 
         conn = _wn_db()
         existing = conn.execute(
@@ -1224,7 +1628,8 @@ async def webauthn_register_begin(_: None = Depends(require_admin)):
         options, state = server.register_begin(
             user,
             credentials=existing_creds,
-            user_verification="preferred",
+            user_verification="discouraged",
+            authenticator_attachment="cross-platform",
         )
 
         import secrets as _sec
@@ -1268,20 +1673,44 @@ async def webauthn_register_complete(
         auth_response = RegistrationResponse.from_dict(credential_data)
         auth_data = server.register_complete(state, auth_response)
 
+        # fido2 2.x: credential_data enthält aaguid, credential_id, public_key
+        cred_data = auth_data.credential_data
+
+        # AAGUID extrahieren (identifiziert das Key-Modell)
+        aaguid_hex = None
+        device_name = None
+        try:
+            aaguid_bytes = cred_data.aaguid
+            aaguid_hex = "-".join([
+                aaguid_bytes[:4].hex(),
+                aaguid_bytes[4:6].hex(),
+                aaguid_bytes[6:8].hex(),
+                aaguid_bytes[8:10].hex(),
+                aaguid_bytes[10:].hex(),
+            ])
+            resolved = _resolve_aaguid(aaguid_hex)
+            device_name = f"{resolved['vendor']} {resolved['model']}"
+            logger.info(f"WebAuthn: AAGUID={aaguid_hex} → {device_name}")
+        except Exception as e:
+            logger.warning(f"WebAuthn: AAGUID-Extraktion fehlgeschlagen: {e}")
+
         conn = _wn_db()
         conn.execute(
             "INSERT OR REPLACE INTO webauthn_credentials "
-            "(user_handle, credential_id, public_key, sign_count) VALUES (?, ?, ?, ?)",
+            "(user_handle, credential_id, public_key, sign_count, aaguid, device_name) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
             (
                 "admin",
-                bytes(auth_data.credential_id),
-                bytes(auth_data.public_key),
-                auth_data.sign_count,
+                bytes(cred_data.credential_id),
+                bytes(cred_data),
+                getattr(auth_data, 'counter', 0),
+                aaguid_hex,
+                device_name,
             ),
         )
         conn.commit()
-        logger.info("WebAuthn: Neuer Credential registriert für 'admin'")
-        return {"success": True}
+        logger.info(f"WebAuthn: Neuer Credential registriert für 'admin' ({device_name or 'unbekannt'})")
+        return {"success": True, "device_name": device_name}
     except ImportError:
         raise HTTPException(501, detail="fido2-Bibliothek nicht installiert")
     except Exception as e:
@@ -1310,14 +1739,13 @@ async def webauthn_authenticate_begin():
 
         from fido2.webauthn import AttestedCredentialData
         credential_list = [
-            AttestedCredentialData.create(
-                row["credential_id"], row["public_key"]
-            ) for row in creds
+            AttestedCredentialData(row["public_key"])
+            for row in creds
         ]
 
         options, state = server.authenticate_begin(
             credentials=credential_list,
-            user_verification="preferred",
+            user_verification="discouraged",
         )
 
         import secrets as _sec
@@ -1358,7 +1786,7 @@ async def webauthn_authenticate_complete(body: dict):
             "WHERE user_handle='admin'"
         ).fetchall()
         credential_list = [
-            AttestedCredentialData.create(row["credential_id"], row["public_key"])
+            AttestedCredentialData(row["public_key"])
             for row in creds
         ]
 
@@ -1366,11 +1794,21 @@ async def webauthn_authenticate_complete(body: dict):
         auth_response = AuthenticationResponse.from_dict(credential_data)
         auth_data = server.authenticate_complete(state, credential_list, auth_response)
 
-        # sign_count aktualisieren
-        conn.execute(
-            "UPDATE webauthn_credentials SET sign_count=? WHERE credential_id=?",
-            (auth_data.new_sign_count, bytes(auth_data.credential_id)),
-        )
+        # sign_count aktualisieren (fido2 2.x: counter statt new_sign_count)
+        new_count = getattr(auth_data, 'new_sign_count', None) or getattr(auth_data, 'counter', 0)
+        # credential_id aus der Response extrahieren (nicht aus auth_data)
+        resp_cred_id = auth_response.id if hasattr(auth_response, 'id') else None
+        if resp_cred_id and new_count:
+            conn.execute(
+                "UPDATE webauthn_credentials SET sign_count=? WHERE credential_id=?",
+                (new_count, bytes(resp_cred_id)),
+            )
+        elif new_count:
+            # Fallback: alle Admin-Credentials updaten
+            conn.execute(
+                "UPDATE webauthn_credentials SET sign_count=? WHERE user_handle='admin'",
+                (new_count,),
+            )
         conn.commit()
 
         # Session anlegen
@@ -1394,12 +1832,29 @@ async def webauthn_list_credentials(_: None = Depends(require_admin)):
     """Listet registrierte WebAuthn-Credentials."""
     conn = _wn_db()
     rows = conn.execute(
-        "SELECT id, user_handle, sign_count, created_at FROM webauthn_credentials "
-        "WHERE user_handle='admin'"
+        "SELECT id, user_handle, sign_count, aaguid, device_name, created_at "
+        "FROM webauthn_credentials WHERE user_handle='admin'"
     ).fetchall()
+    creds = []
+    for r in rows:
+        d = dict(r)
+        # Vendor/Model aus AAGUID auflösen (falls device_name fehlt)
+        if not d.get("device_name") and d.get("aaguid"):
+            resolved = _resolve_aaguid(d["aaguid"])
+            d["device_name"] = f"{resolved['vendor']} {resolved['model']}"
+            d["vendor"] = resolved["vendor"]
+            d["model"] = resolved["model"]
+        elif d.get("device_name"):
+            parts = d["device_name"].split(" ", 1)
+            d["vendor"] = parts[0] if parts else "Unknown"
+            d["model"] = parts[1] if len(parts) > 1 else d["device_name"]
+        else:
+            d["vendor"] = "Unknown"
+            d["model"] = "Security Key"
+        creds.append(d)
     return {
-        "count": len(rows),
-        "credentials": [dict(r) for r in rows],
+        "count": len(creds),
+        "credentials": creds,
     }
 
 
@@ -1414,3 +1869,116 @@ async def webauthn_delete_credential(cred_id: int, _: None = Depends(require_adm
     if result.rowcount == 0:
         raise HTTPException(404, detail="Credential nicht gefunden")
     return {"success": True, "deleted_id": cred_id}
+
+
+# ── Reverse-Proxy für User-Apps ──────────────────────────────────────────────
+
+_proxy_client = httpx.AsyncClient(timeout=30.0, follow_redirects=False)
+
+
+@app.api_route("/proxy/{app_id}/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"])
+@app.api_route("/proxy/{app_id}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"])
+async def reverse_proxy(app_id: str, request: Request, path: str = ""):
+    """Leitet HTTP-Anfragen an User-Apps weiter (LXC-Subnetze nicht direkt erreichbar)."""
+    # Auth: API-Key aus Query, Header oder Cookie
+    api_key = (
+        request.query_params.get("key")
+        or request.headers.get("x-api-key")
+        or request.cookies.get(f"proxy_key_{app_id}")
+    )
+    if not api_key:
+        raise HTTPException(401, detail="API-Key erforderlich")
+
+    from lxc_manager import _get_db
+    conn = _get_db()
+
+    user_row = conn.execute("SELECT user_id FROM users WHERE api_key=?", (api_key,)).fetchone()
+    if not user_row:
+        raise HTTPException(403, detail="Ungültiger API-Key")
+    user_id = user_row["user_id"]
+
+    # App-Eintrag suchen (scoped: u{id}__{app_id})
+    scoped_id = f"u{user_id}__{app_id}"
+    app_row = conn.execute(
+        "SELECT ip, port FROM apps WHERE app_id=? AND user_id=?",
+        (scoped_id, user_id)
+    ).fetchone()
+    if not app_row:
+        app_row = conn.execute(
+            "SELECT ip, port FROM apps WHERE LOWER(app_id)=? AND user_id=?",
+            (scoped_id.lower(), user_id)
+        ).fetchone()
+    if not app_row:
+        raise HTTPException(404, detail=f"App '{app_id}' nicht gefunden")
+
+    target_url = f"http://{app_row['ip']}:{app_row['port']}/{path}"
+    if request.url.query:
+        params = "&".join(
+            f"{k}={v}" for k, v in request.query_params.items() if k != "key"
+        )
+        if params:
+            target_url += f"?{params}"
+
+    # Headers weiterleiten (ohne hop-by-hop und Auth)
+    skip_headers = {"host", "x-api-key", "connection", "transfer-encoding"}
+    fwd_headers = {
+        k: v for k, v in request.headers.items() if k.lower() not in skip_headers
+    }
+    fwd_headers["host"] = f"{app_row['ip']}:{app_row['port']}"
+    fwd_headers["x-forwarded-for"] = request.client.host if request.client else "unknown"
+    fwd_headers["x-forwarded-proto"] = "http"
+
+    body = await request.body()
+
+    try:
+        resp = await _proxy_client.request(
+            method=request.method,
+            url=target_url,
+            headers=fwd_headers,
+            content=body if body else None,
+        )
+    except httpx.ConnectError:
+        raise HTTPException(502, detail=f"App '{app_id}' nicht erreichbar")
+    except httpx.TimeoutException:
+        raise HTTPException(504, detail=f"App '{app_id}' Timeout")
+
+    # Response-Headers filtern (content-length wird neu berechnet)
+    resp_headers = dict(resp.headers)
+    for h in ("transfer-encoding", "connection", "content-encoding", "content-length"):
+        resp_headers.pop(h, None)
+
+    # Redirect-Location umschreiben: /foo → /proxy/{app_id}/foo
+    proxy_prefix = f"/proxy/{app_id}"
+    target_origin = f"http://{app_row['ip']}:{app_row['port']}"
+    if "location" in resp_headers:
+        loc = resp_headers["location"]
+        if loc.startswith(target_origin):
+            loc = loc[len(target_origin):]
+        if loc.startswith("/"):
+            loc = f"{proxy_prefix}{loc}"
+        resp_headers["location"] = loc
+
+    # HTML-Body: absolute Pfade umschreiben
+    content = resp.content
+    content_type = resp_headers.get("content-type", "")
+    if "text/html" in content_type:
+        text = content.decode("utf-8", errors="replace")
+        for attr in ('href="/', 'src="/', 'action="/'):
+            text = text.replace(attr, f'{attr[:-1]}{proxy_prefix}/')
+        content = text.encode("utf-8")
+
+    response = Response(
+        content=content,
+        status_code=resp.status_code,
+        headers=resp_headers,
+    )
+
+    # Auth-Cookie setzen (damit Redirects und Assets ohne ?key= funktionieren)
+    response.set_cookie(
+        key=f"proxy_key_{app_id}",
+        value=api_key,
+        httponly=True,
+        samesite="lax",
+        max_age=86400,
+    )
+    return response

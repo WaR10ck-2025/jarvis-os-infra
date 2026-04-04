@@ -1,0 +1,16 @@
+# USB-Spiegel (ISOs + Backups, ~27 GB)
+USB-F35-Pro/
+Ventoy/
+
+# Build-Artefakte
+*.iso
+Build/
+
+# Secrets (haben eigene .gitignore)
+secrets/
+
+# TLS-Zertifikate (mkcert)
+*.pem
+
+# Lokale Testdateien
+Javis-OS/

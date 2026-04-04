@@ -48,7 +48,14 @@ APPDATA_BASE=""
 
 USB_DEV=$(blkid -L "$BACKUP_USB_LABEL" 2>/dev/null || true)
 if [ -n "$USB_DEV" ]; then
-  mountpoint -q "$BACKUP_USB_MOUNT" || mount "$USB_DEV" "$BACKUP_USB_MOUNT"
+  # Stale-Mount-Schutz: obersten Mount prüfen
+  TOP_MOUNT=$(findmnt -n -o SOURCE "$BACKUP_USB_MOUNT" 2>/dev/null | tail -1)
+  if [ -n "$TOP_MOUNT" ] && [ "$TOP_MOUNT" = "$USB_DEV" ]; then
+    : # Korrektes Device bereits gemountet
+  else
+    [ -n "$TOP_MOUNT" ] && log_warn "Mount-Mismatch: $BACKUP_USB_MOUNT → $TOP_MOUNT statt $USB_DEV — mount drüber"
+    mount "$USB_DEV" "$BACKUP_USB_MOUNT" 2>/dev/null || true
+  fi
   APPDATA_BASE="${BACKUP_BASE_DIR_USB}/appdata"
 fi
 

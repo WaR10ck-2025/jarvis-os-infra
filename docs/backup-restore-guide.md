@@ -43,7 +43,7 @@ lsblk
 fdisk -l | grep -E "^Disk /dev/sd"
 
 # Formatieren mit Label (ersetzt alle Daten!):
-mkfs.ext4 -L OPENCLAW-BAK /dev/sdX
+mkfs.exfat -L Backup /dev/sdX
 ```
 
 ### 4. age-Key sichern
@@ -74,11 +74,11 @@ bash /opt/openclaw/scripts/backup/backup-all.sh --layer all
 
 ### USB-Festplatte
 
-Standard-Ziel. Festplatte mit Label `OPENCLAW-BAK` wird automatisch erkannt.
+Standard-Ziel. USB-Stick mit Label `Backup` wird automatisch erkannt.
 
 ```bash
 # USB-Status prüfen:
-blkid -L OPENCLAW-BAK
+blkid -L Backup
 df -h /mnt/backup-usb/
 ```
 

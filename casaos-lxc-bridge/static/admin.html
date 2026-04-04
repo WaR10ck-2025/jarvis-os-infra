@@ -449,20 +449,89 @@
       <h2>Backup</h2>
       <span id="backupStatusBadge" style="font-size:0.75rem;padding:2px 8px;border-radius:9999px;background:var(--surface);color:var(--muted);border:1px solid var(--border)"></span>
     </div>
+
+    <!-- USB-Status-Karte -->
+    <div id="usbStatusCard" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 18px;margin-bottom:12px">
+      <div style="display:flex;align-items:center;gap:14px">
+        <div id="usbStatusIcon" style="width:36px;text-align:center"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="color:var(--muted)"><rect x="4" y="2" width="16" height="18" rx="2"/><path d="M8 22h8"/><circle cx="12" cy="14" r="2.5"/><path d="M10 7h1m3 0h-1"/><path d="M12 16.5V20"/></svg></div>
+        <div style="flex:1;min-width:0">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+            <span id="usbDeviceName" style="font-weight:600;font-size:0.85rem">USB Backup-Partition</span>
+            <span id="usbStatusBadge" style="font-size:0.7rem;padding:1px 7px;border-radius:9999px;background:var(--border);color:var(--muted)">prüfe…</span>
+            <button class="btn-icon" onclick="loadUsbStatus()" title="Aktualisieren" style="margin-left:auto;font-size:0.75rem;color:var(--muted);background:transparent;border:none;cursor:pointer;padding:2px 6px;border-radius:4px">&#8635;</button>
+          </div>
+          <div id="usbStatusDetail" style="font-size:0.75rem;color:var(--muted)">Status wird geladen…</div>
+          <div id="usbSpaceBar" style="display:none;margin-top:6px;height:6px;background:var(--bg);border-radius:3px;overflow:hidden">
+            <div id="usbSpaceUsed" style="height:100%;background:var(--accent);border-radius:3px;transition:width .3s"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Aufklappbare Details: Speicher-Breakdown + Cleanup -->
+      <div id="usbDetailsSection" style="display:none;margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+          <span style="font-weight:600;font-size:0.8rem">Speicher-Aufteilung</span>
+          <button class="btn btn-ghost" style="margin-left:auto;font-size:0.7rem;padding:3px 10px;border:1px solid var(--border);border-radius:var(--radius);color:var(--muted);cursor:pointer"
+                  id="usbCleanupBtn" onclick="startUsbCleanup()">&#128465; Aufräumen</button>
+        </div>
+
+        <!-- Breakdown-Balken -->
+        <div id="usbBreakdown" style="font-size:0.75rem;color:var(--muted)">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+            <span style="width:90px;font-size:0.7rem">Layer 1 Config</span>
+            <div style="flex:1;height:8px;background:var(--bg);border-radius:4px;overflow:hidden">
+              <div id="usbBarConfigs" style="height:100%;background:#60a5fa;border-radius:4px;transition:width .3s;width:0"></div>
+            </div>
+            <span id="usbSizeConfigs" style="min-width:65px;text-align:right;font-size:0.7rem">—</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+            <span style="width:90px;font-size:0.7rem">Layer 2 Appdata</span>
+            <div style="flex:1;height:8px;background:var(--bg);border-radius:4px;overflow:hidden">
+              <div id="usbBarAppdata" style="height:100%;background:#a78bfa;border-radius:4px;transition:width .3s;width:0"></div>
+            </div>
+            <span id="usbSizeAppdata" style="min-width:65px;text-align:right;font-size:0.7rem">—</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+            <span style="width:90px;font-size:0.7rem">Layer 3 Dump</span>
+            <div style="flex:1;height:8px;background:var(--bg);border-radius:4px;overflow:hidden">
+              <div id="usbBarDump" style="height:100%;background:#f59e0b;border-radius:4px;transition:width .3s;width:0"></div>
+            </div>
+            <span id="usbSizeDump" style="min-width:65px;text-align:right;font-size:0.7rem">—</span>
+          </div>
+        </div>
+
+        <!-- Retention-Info -->
+        <div id="usbRetentionInfo" style="font-size:0.65rem;color:var(--muted);margin-top:4px;opacity:0.7"></div>
+
+        <!-- Details pro VM (dump) -->
+        <details id="usbDumpDetails" style="margin-top:8px;font-size:0.7rem">
+          <summary style="cursor:pointer;color:var(--muted);font-size:0.7rem">vzdump Details</summary>
+          <div id="usbDumpList" style="margin-top:6px;padding-left:4px"></div>
+        </details>
+
+        <!-- Cleanup-Log -->
+        <pre id="usbCleanupLog" style="display:none;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:10px;font-size:0.7rem;max-height:250px;overflow-y:auto;white-space:pre-wrap;color:var(--fg);margin-top:10px"></pre>
+      </div>
+    </div>
+
     <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px;margin-bottom:12px">
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px">
         <select id="backupLayer" style="background:var(--bg);color:var(--fg);border:1px solid var(--border);border-radius:var(--radius);padding:6px 10px;font-size:0.85rem">
           <option value="all">Alle Layer (1+2+3)</option>
+          <option value="1,3">Layer 1+2 (schnell)</option>
           <option value="1">Layer 1 — Config</option>
-          <option value="2">Layer 2 — vzdump (LXC/VM)</option>
-          <option value="3">Layer 3 — App-Daten</option>
-          <option value="1,3">Layer 1+3 (schnell)</option>
+          <option value="3">Layer 2 — App-Daten</option>
+          <option value="2">Layer 3 — vzdump (LXC/VM)</option>
         </select>
         <button class="btn btn-primary btn-sm" id="backupStartBtn" onclick="startBackup()">▶ Backup starten</button>
         <span id="backupMsg" style="font-size:0.8rem;color:var(--muted)"></span>
       </div>
       <pre id="backupLog" style="display:none;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:12px;font-size:0.75rem;max-height:400px;overflow-y:auto;white-space:pre-wrap;color:var(--fg);margin:0"></pre>
     </div>
+    <details style="margin-top:10px">
+      <summary style="font-size:0.75rem;color:#64748b;cursor:pointer;user-select:none">Debug-Info</summary>
+      <pre id="backupDebugPanel" style="font-size:0.7rem;color:#94a3b8;background:#0f172a;padding:8px;border-radius:6px;margin-top:6px;max-height:200px;overflow:auto;white-space:pre-wrap;word-break:break-all;"></pre>
+    </details>
   </div>
 
   <!-- ══ Tab: YubiKey ══════════════════════════════════════════ -->
@@ -476,9 +545,13 @@
         <button class="btn btn-primary btn-sm" id="yubiRegisterBtn" onclick="yubiRegister()">+ YubiKey registrieren</button>
         <span id="yubiRegisterMsg" style="font-size:0.8rem;color:var(--muted);margin-left:12px"></span>
         <table class="user-table" style="margin-top:14px">
-          <thead><tr><th>#</th><th>Registriert am</th><th></th></tr></thead>
-          <tbody id="yubiKeysList"><tr><td colspan="3" style="color:var(--muted);text-align:center">Wird geladen…</td></tr></tbody>
+          <thead><tr><th style="width:40px"></th><th>Modell</th><th>Registriert</th><th>Logins</th><th></th></tr></thead>
+          <tbody id="yubiKeysList"><tr><td colspan="5" style="color:var(--muted);text-align:center">Wird geladen…</td></tr></tbody>
         </table>
+        <details style="margin-top:10px">
+          <summary style="font-size:0.75rem;color:#64748b;cursor:pointer;user-select:none">Debug-Info</summary>
+          <pre id="yubiDebugPanel" style="font-size:0.7rem;color:#94a3b8;background:#0f172a;padding:8px;border-radius:6px;margin-top:6px;max-height:200px;overflow:auto;white-space:pre-wrap;word-break:break-all;"></pre>
+        </details>
       </div>
     </div>
   </div>
@@ -530,7 +603,7 @@
     // Lazy-load data when switching to tab
     if (tabId === 'resources') loadResources();
     if (tabId === 'requests') loadRequests();
-    if (tabId === 'backup') loadBackupStatus();
+    if (tabId === 'backup') { loadBackupStatus(); loadUsbStatus(); }
     if (tabId === 'yubikey') loadYubiKeys();
   }
 
@@ -1197,8 +1270,9 @@
         { method:'POST', headers:{'Content-Type':'application/json'}, body:'{}' });
       if (!r.ok) { msg.textContent = await r.text(); btn.disabled=false; return; }
       const { options, handle } = await r.json();
-      prepareOptions(options);
-      const cred = await navigator.credentials.get({ publicKey: options });
+      const pkOpts = options.publicKey || options;
+      prepareOptions(pkOpts);
+      const cred = await navigator.credentials.get({ publicKey: pkOpts });
       const r2 = await fetch('/auth/webauthn/authenticate/complete', {
         method:'POST', headers:{'Content-Type':'application/json'},
         body: JSON.stringify({ handle, credential: credToJSON(cred) }),
@@ -1212,6 +1286,219 @@
   }
 
   // ── Backup ──────────────────────────────────────────────
+  let _usbMounted = false;
+
+  // Hersteller-spezifische USB-Icons (SVG)
+  const _usbVendorIcons = {
+    'Lexar': '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="1" width="14" height="17" rx="2.5"/><rect x="8" y="18" width="8" height="4" rx="1"/><circle cx="12" cy="10.5" r="3" stroke-dasharray="2 1.5"/><circle cx="12" cy="10.5" r="1" fill="currentColor" stroke="none"/><rect x="9" y="3.5" width="2" height="1.5" rx="0.5" fill="currentColor" stroke="none"/><rect x="13" y="3.5" width="2" height="1.5" rx="0.5" fill="currentColor" stroke="none"/></svg>',
+    'SanDisk': '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><rect x="7" y="19" width="10" height="2" rx="0.5"/><path d="M7 9h3m4 0h3"/><path d="M7 12h10"/><path d="M7 15h6"/></svg>',
+    'Samsung': '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="16" rx="3"/><rect x="8" y="19" width="8" height="3" rx="1"/><path d="M8 8h8M8 11h8M8 14h5"/></svg>',
+    'Kingston': '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><rect x="7" y="18" width="10" height="2" rx="0.5"/><circle cx="12" cy="12" r="3.5"/><circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/></svg>',
+    '_default': '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="17" rx="2"/><rect x="8" y="19" width="8" height="3" rx="1"/><circle cx="12" cy="11" r="2.5"/><path d="M10 6h1m3 0h-1"/></svg>',
+  };
+
+  function _setUsbIcon(iconEl, vendor, color) {
+    const svg = _usbVendorIcons[vendor] || _usbVendorIcons['_default'];
+    iconEl.innerHTML = svg;
+    iconEl.querySelector('svg').style.color = color;
+  }
+
+  function _bkDbg(line) {
+    const p = document.getElementById('backupDebugPanel');
+    if (p) p.textContent += line + '\n';
+  }
+  function _bkDbgClear(title) {
+    const p = document.getElementById('backupDebugPanel');
+    if (p) p.textContent = `[${new Date().toLocaleTimeString()}] ${title}\n`;
+  }
+
+  async function loadUsbStatus() {
+    const badge = document.getElementById('usbStatusBadge');
+    const detail = document.getElementById('usbStatusDetail');
+    const icon = document.getElementById('usbStatusIcon');
+    const spaceBar = document.getElementById('usbSpaceBar');
+    const spaceUsed = document.getElementById('usbSpaceUsed');
+    const card = document.getElementById('usbStatusCard');
+    const deviceName = document.getElementById('usbDeviceName');
+    const detailsSection = document.getElementById('usbDetailsSection');
+    _bkDbgClear('USB-Status abfragen');
+    try {
+      const s = await apiFetch('/admin/backup/usb-status');
+      _bkDbg(`connected: ${s.connected}, mounted: ${s.mounted}, stale_mount: ${s.stale_mount || 'nein'}`);
+      _bkDbg(`device: ${s.device || '-'}, vendor: ${s.vendor || '-'}, model: ${s.model || '-'}`);
+      _bkDbg(`total: ${s.total_gb} GB, used: ${s.used_gb} GB, free: ${s.free_gb} GB`);
+      const vendor = s.vendor || null;
+      const model = s.model || null;
+      const label = model || (vendor ? vendor + ' USB' : 'USB Backup-Partition');
+
+      if (s.connected && s.mounted) {
+        _usbMounted = true;
+        deviceName.textContent = label;
+        badge.textContent = 'Bereit';
+        badge.style.background = '#16a34a33'; badge.style.color = '#4ade80';
+        card.style.borderColor = '#16a34a55';
+        _setUsbIcon(icon, vendor, '#4ade80');
+        const pct = s.total_gb > 0 ? ((s.used_gb / s.total_gb) * 100).toFixed(0) : 0;
+        detail.textContent = `${s.device} \u2014 ${s.used_gb} / ${s.total_gb} GB belegt (${pct}%), ${s.free_gb} GB frei`;
+        spaceBar.style.display = 'block';
+        spaceUsed.style.width = pct + '%';
+        spaceUsed.style.background = pct > 90 ? '#f87171' : pct > 75 ? '#fbbf24' : 'var(--accent)';
+        detailsSection.style.display = 'block';
+        loadUsbContents(s.total_gb);
+      } else if (s.connected && s.stale_mount) {
+        _usbMounted = false;
+        deviceName.textContent = label;
+        badge.textContent = 'Stale Mount';
+        badge.style.background = '#dc262633'; badge.style.color = '#f87171';
+        card.style.borderColor = '#dc262644';
+        _setUsbIcon(icon, vendor, '#f87171');
+        detail.textContent = `${s.device} erkannt, aber /mnt/backup-usb zeigt auf ${s.stale_mount} (altes Ger\u00e4t) \u2014 umount + remount n\u00f6tig`;
+        spaceBar.style.display = 'none';
+        detailsSection.style.display = 'none';
+      } else if (s.connected) {
+        _usbMounted = false;
+        deviceName.textContent = label;
+        badge.textContent = 'Nicht gemountet';
+        badge.style.background = '#f59e0b33'; badge.style.color = '#fbbf24';
+        card.style.borderColor = '#f59e0b55';
+        _setUsbIcon(icon, vendor, '#fbbf24');
+        detail.textContent = `${s.device} erkannt, aber nicht gemountet \u2014 Backup wird beim Start automatisch mounten`;
+        spaceBar.style.display = 'none';
+        detailsSection.style.display = 'none';
+      } else {
+        _usbMounted = false;
+        deviceName.textContent = 'USB Backup-Partition';
+        badge.textContent = 'Nicht verbunden';
+        badge.style.background = '#dc262633'; badge.style.color = '#f87171';
+        card.style.borderColor = '#dc262644';
+        _setUsbIcon(icon, null, '#f87171');
+        detail.textContent = 'Kein USB mit Label "Backup" erkannt \u2014 Stick einstecken + Fingerprint scannen';
+        spaceBar.style.display = 'none';
+        detailsSection.style.display = 'none';
+      }
+    } catch(e) {
+      _usbMounted = false;
+      badge.textContent = 'Fehler';
+      badge.style.background = '#dc262633'; badge.style.color = '#f87171';
+      _setUsbIcon(icon, null, '#f87171');
+      detail.textContent = 'USB-Status konnte nicht abgefragt werden';
+      spaceBar.style.display = 'none';
+      detailsSection.style.display = 'none';
+      _bkDbg(`FEHLER: ${e.name || 'Error'}: ${e.message || e}`);
+    }
+  }
+
+  function _fmtBytes(bytes) {
+    if (bytes >= 1024**3) return (bytes / 1024**3).toFixed(1) + ' GB';
+    if (bytes >= 1024**2) return (bytes / 1024**2).toFixed(1) + ' MB';
+    if (bytes >= 1024)    return (bytes / 1024).toFixed(0) + ' KB';
+    return bytes + ' B';
+  }
+
+  async function loadUsbContents(totalGb) {
+    try {
+      const c = await apiFetch('/admin/backup/usb-contents');
+      const totalBytes = (totalGb || 1) * 1024**3;
+
+      // Breakdown-Balken
+      const confPct = Math.max(0.5, (c.configs.size_bytes / totalBytes) * 100);
+      const dumpPct = Math.max(0.5, (c.dump.size_bytes / totalBytes) * 100);
+      const appPct  = Math.max(0.5, (c.appdata.size_bytes / totalBytes) * 100);
+
+      document.getElementById('usbBarConfigs').style.width = confPct.toFixed(1) + '%';
+      document.getElementById('usbBarDump').style.width = dumpPct.toFixed(1) + '%';
+      document.getElementById('usbBarAppdata').style.width = appPct.toFixed(1) + '%';
+
+      const confInfo = c.configs.oldest ? `${c.configs.count} Tage, ab ${c.configs.oldest}` : `${c.configs.count} Tage`;
+      const appInfo  = c.appdata.oldest ? `${c.appdata.count} Tage, ab ${c.appdata.oldest}` : `${c.appdata.count} Tage`;
+
+      document.getElementById('usbSizeConfigs').textContent = `${_fmtBytes(c.configs.size_bytes)} (${confInfo})`;
+      document.getElementById('usbSizeDump').textContent = `${_fmtBytes(c.dump.size_bytes)} (${c.dump.count} Dateien)`;
+      document.getElementById('usbSizeAppdata').textContent = `${_fmtBytes(c.appdata.size_bytes)} (${appInfo})`;
+
+      // Retention-Info
+      document.getElementById('usbRetentionInfo').textContent =
+        `Retention: Config ${c.retention.config_days}d | Appdata ${c.retention.appdata_days}d | vzdump ${c.retention.vzdump_count} Versionen`;
+
+      // VM-Details
+      const listEl = document.getElementById('usbDumpList');
+      const detailsEl = document.getElementById('usbDumpDetails');
+      if (c.dump.vms.length > 0) {
+        detailsEl.style.display = 'block';
+        listEl.innerHTML = c.dump.vms.map(vm =>
+          `<div style="display:flex;justify-content:space-between;padding:2px 0;border-bottom:1px solid var(--border)">` +
+          `<span>${vm.type.toUpperCase()} ${vm.vmid}</span>` +
+          `<span>${vm.backups} Backup${vm.backups !== 1 ? 's' : ''} \u2014 ${_fmtBytes(vm.size_bytes)}</span>` +
+          `</div>`
+        ).join('');
+      } else {
+        detailsEl.style.display = 'none';
+      }
+    } catch (e) {
+      document.getElementById('usbRetentionInfo').textContent = 'Inhalte konnten nicht geladen werden';
+    }
+  }
+
+  async function startUsbCleanup() {
+    if (!_usbMounted) return;
+    const btn = document.getElementById('usbCleanupBtn');
+    const log = document.getElementById('usbCleanupLog');
+    if (!confirm('Retention-Bereinigung durchf\u00fchren?\n\nAlte Backups werden gem\u00e4\u00df den konfigurierten Aufbewahrungsregeln gel\u00f6scht.')) return;
+
+    btn.disabled = true;
+    btn.textContent = '\u23F3 l\u00e4uft\u2026';
+    log.style.display = 'block';
+    log.textContent = '';
+    _bkDbg(`\n[${new Date().toLocaleTimeString()}] USB-Cleanup gestartet`);
+
+    try {
+      const resp = await fetch('/admin/backup/usb-cleanup', {
+        method: 'POST', credentials: 'include',
+      });
+      _bkDbg(`Cleanup Response: ${resp.status} ${resp.statusText}`);
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        throw new Error(err.detail || `HTTP ${resp.status}`);
+      }
+
+      const reader = resp.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop();
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          const ev = JSON.parse(line.slice(6));
+          if (ev.type === 'log' || ev.type === 'delete') {
+            log.textContent += (ev.line || ev.file) + '\n';
+            log.scrollTop = log.scrollHeight;
+          } else if (ev.type === 'done') {
+            const msg = ev.deleted > 0
+              ? `\u2713 Fertig: ${ev.deleted} Dateien gel\u00f6scht, ${ev.freed_mb} MB freigegeben`
+              : '\u2713 Fertig: Nichts zu bereinigen \u2014 alles innerhalb der Retention';
+            log.textContent += '\n' + msg + '\n';
+            log.scrollTop = log.scrollHeight;
+          } else if (ev.type === 'error') {
+            log.textContent += '\u2717 Fehler: ' + ev.message + '\n';
+          }
+        }
+      }
+    } catch (e) {
+      log.textContent += '\u2717 ' + e.message + '\n';
+      _bkDbg(`Cleanup FEHLER: ${e.name || 'Error'}: ${e.message || e}`);
+    }
+
+    btn.disabled = false;
+    btn.textContent = '\u{1F5D1} Aufr\u00e4umen';
+    // Status + Contents neu laden
+    loadUsbStatus();
+  }
+
   async function loadBackupStatus() {
     try {
       const s = await apiFetch('/admin/backup/status');
@@ -1241,12 +1528,15 @@
     msg.textContent = 'Backup wird gestartet…';
     log.style.display = 'block';
     log.textContent = '';
+    _bkDbgClear(`Backup starten (layer=${layer})`);
+    _bkDbg(`USB mounted: ${_usbMounted}`);
 
     try {
       const resp = await fetch(`/admin/backup?layer=${layer}`, {
         method: 'POST',
         credentials: 'include',
       });
+      _bkDbg(`Response: ${resp.status} ${resp.statusText}, Content-Type: ${resp.headers.get('content-type')}`);
       if (!resp.ok) {
         const err = await resp.json().catch(() => ({}));
         throw new Error(err.detail || `HTTP ${resp.status}`);
@@ -1280,30 +1570,70 @@
         }
       }
     } catch (e) {
-      msg.textContent = '✗ ' + e.message;
+      msg.textContent = '\u2717 ' + e.message;
       msg.style.color = '#f87171';
+      _bkDbg(`FEHLER: ${e.name || 'Error'}: ${e.message || e}`);
     }
     btn.disabled = false;
     loadBackupStatus();
+    loadUsbStatus();
   }
 
   async function yubiRegister() {
     const btn = document.getElementById('yubiRegisterBtn');
     const msg = document.getElementById('yubiRegisterMsg');
-    btn.disabled = true; msg.textContent = 'YubiKey berühren…';
+
+    // Secure Context pr\u00fcfen (WebAuthn erfordert HTTPS oder localhost)
+    if (!window.isSecureContext || !navigator.credentials) {
+      msg.style.color = '#f87171';
+      msg.textContent = 'WebAuthn erfordert HTTPS \u2014 Seite \u00fcber https:// oder localhost aufrufen';
+      return;
+    }
+
+    btn.disabled = true; msg.style.color = 'var(--muted)'; msg.textContent = 'Optionen werden geladen\u2026';
+    const dbg = document.getElementById('yubiDebugPanel');
+    dbg.textContent = `[${new Date().toLocaleTimeString()}] Registrierung gestartet\norigin: ${location.origin}\nhostname: ${location.hostname}\nprotocol: ${location.protocol}\nisSecureContext: ${window.isSecureContext}\n`;
     try {
       const r = await apiFetch('/auth/webauthn/register/begin', { method:'POST' });
-      prepareOptions(r.options);
-      const cred = await navigator.credentials.create({ publicKey: r.options });
+      const pkOpts = r.options.publicKey || r.options;
+      dbg.textContent += `\nServer-Optionen:\n  rpId: ${pkOpts.rp?.id}\n  rpName: ${pkOpts.rp?.name}\n  attestation: ${r.options.publicKey?.attestation || r.options.attestation || 'none'}\n  authenticatorSelection: ${JSON.stringify(pkOpts.authenticatorSelection)}\n  challenge: ${typeof pkOpts.challenge} (${pkOpts.challenge?.length} chars)\n  pubKeyCredParams: ${pkOpts.pubKeyCredParams?.map(p=>p.alg).join(', ')}\n`;
+      prepareOptions(pkOpts);
+      dbg.textContent += `\nNach prepareOptions:\n  challenge: ${pkOpts.challenge?.constructor?.name}\n  user.id: ${pkOpts.user?.id?.constructor?.name}\n`;
+      msg.textContent = 'YubiKey einstecken und Knopf ber\u00fchren\u2026';
+      dbg.textContent += '\n>>> navigator.credentials.create() aufgerufen...\n';
+      const cred = await navigator.credentials.create({ publicKey: pkOpts });
+      dbg.textContent += `<<< Credential erhalten (type: ${cred?.type}, id: ${cred?.id?.substring(0,20)}...)\n`;
+      msg.textContent = 'Verifiziere\u2026';
       const r2 = await apiFetch('/auth/webauthn/register/complete', {
         method:'POST', body: JSON.stringify({ handle: r.handle, credential: credToJSON(cred) }),
       });
-      msg.textContent = r2.success ? '✓ YubiKey registriert!' : 'Fehler';
-      if (r2.success) loadYubiKeys();
+      if (r2.success) {
+        msg.style.color = '#4ade80';
+        msg.textContent = r2.device_name ? `\u2713 ${r2.device_name} registriert!` : '\u2713 YubiKey registriert!';
+        dbg.textContent += `\nERFOLG: ${r2.device_name || 'registriert'}`;
+        loadYubiKeys();
+      } else {
+        msg.textContent = 'Fehler';
+        dbg.textContent += '\nServer: Fehler (success=false)';
+      }
     } catch(e) {
-      msg.textContent = e.name==='NotAllowedError' ? 'Abgebrochen.' : String(e);
+      msg.style.color = '#f87171';
+      msg.textContent = e.name === 'NotAllowedError' ? 'Abgebrochen \u2014 YubiKey einstecken und Knopf ber\u00fchren.' : `${e.name}: ${e.message}`;
+      dbg.textContent += `\nFEHLER: ${e.name}: ${e.message}`;
     }
     btn.disabled = false;
+  }
+
+  // Hersteller-Icons f\u00fcr Security Keys (SVG)
+  const _keyVendorIcons = {
+    'Yubico': '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="1" width="10" height="19" rx="5"/><circle cx="12" cy="8" r="2.5"/><path d="M12 10.5V16"/><rect x="9" y="20" width="6" height="3" rx="1"/></svg>',
+    'Google': '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2" width="12" height="17" rx="3"/><circle cx="12" cy="10" r="3"/><path d="M12 13V16"/><rect x="9" y="19" width="6" height="3" rx="1"/></svg>',
+    'Feitian': '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="17" rx="3"/><circle cx="12" cy="9" r="3" stroke-dasharray="2 1.5"/><circle cx="12" cy="9" r="1" fill="currentColor" stroke="none"/><rect x="9" y="19" width="6" height="3" rx="1"/></svg>',
+    '_default': '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2" width="10" height="17" rx="3"/><circle cx="12" cy="9" r="2.5"/><path d="M12 11.5V15"/><rect x="9" y="19" width="6" height="3" rx="1"/></svg>',
+  };
+
+  function _getKeyIcon(vendor) {
+    return _keyVendorIcons[vendor] || _keyVendorIcons['_default'];
   }
 
   async function loadYubiKeys() {
@@ -1321,15 +1651,22 @@
     try {
       const data = await apiFetch('/auth/webauthn/credentials');
       if (!data.credentials?.length) {
-        list.innerHTML = '<tr><td colspan="3" style="color:var(--muted);text-align:center">Kein YubiKey registriert</td></tr>';
+        list.innerHTML = '<tr><td colspan="5" style="color:var(--muted);text-align:center">Kein YubiKey registriert</td></tr>';
         return;
       }
-      list.innerHTML = data.credentials.map(c => `
-        <tr>
-          <td>#${c.id}</td>
-          <td style="color:var(--muted);font-size:0.8rem">${(c.created_at||'').split('T')[0]}</td>
-          <td><button class="btn btn-danger btn-sm" onclick="deleteYubiKey(${c.id})">Löschen</button></td>
-        </tr>`).join('');
+      list.innerHTML = data.credentials.map(c => {
+        const vendor = c.vendor || 'Unknown';
+        const model = c.model || 'Security Key';
+        const icon = _getKeyIcon(vendor);
+        const date = (c.created_at || '').split('T')[0];
+        return `<tr>
+          <td style="text-align:center;color:var(--accent)">${icon}</td>
+          <td><span style="font-weight:600;font-size:0.8rem">${model}</span><br><span style="font-size:0.65rem;color:var(--muted)">${vendor}${c.aaguid ? ' \u2014 ' + c.aaguid.slice(0,8) + '\u2026' : ''}</span></td>
+          <td style="color:var(--muted);font-size:0.8rem">${date}</td>
+          <td style="color:var(--muted);font-size:0.8rem">${c.sign_count || 0}x</td>
+          <td><button class="btn btn-danger btn-sm" onclick="deleteYubiKey(${c.id})">L\u00f6schen</button></td>
+        </tr>`;
+      }).join('');
     } catch {}
   }
 

@@ -131,7 +131,12 @@ if [ "$RESTORE_FROM" = "usb" ]; then
     USB_DEV=$(blkid -L "$BACKUP_USB_LABEL" 2>/dev/null || true)
   fi
   if [ -n "$USB_DEV" ]; then
-    mountpoint -q "$BACKUP_USB_MOUNT" || mount "$USB_DEV" "$BACKUP_USB_MOUNT"
+    # Stale-Mount-Schutz: obersten Mount prüfen
+    TOP_MOUNT=$(findmnt -n -o SOURCE "$BACKUP_USB_MOUNT" 2>/dev/null | tail -1)
+    if [ -z "$TOP_MOUNT" ] || [ "$TOP_MOUNT" != "$USB_DEV" ]; then
+      [ -n "$TOP_MOUNT" ] && warn "Mount-Mismatch: $BACKUP_USB_MOUNT → $TOP_MOUNT statt $USB_DEV"
+      mount "$USB_DEV" "$BACKUP_USB_MOUNT" 2>/dev/null || true
+    fi
     ok "USB gemountet: $USB_DEV → $BACKUP_USB_MOUNT"
 
     # Backups anzeigen
