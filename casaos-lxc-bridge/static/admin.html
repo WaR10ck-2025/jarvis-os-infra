@@ -595,6 +595,8 @@
   let expandedUser   = null;   // user_id oder null
   let pollingTimers  = {};     // user_id → intervalId
   let detailCache    = {};     // user_id → full status object
+  let _usbPollTimer  = null;   // USB auto-detect polling timer
+  let _usbLastState  = null;   // letzter bekannter USB-Zustand ('connected'|'mounted'|'stale'|'disconnected')
 
   /* ── Tab Navigation ──────────────────────────────────────────── */
   function switchTab(tabId) {
@@ -603,7 +605,8 @@
     // Lazy-load data when switching to tab
     if (tabId === 'resources') loadResources();
     if (tabId === 'requests') loadRequests();
-    if (tabId === 'backup') { loadBackupStatus(); loadUsbStatus(); }
+    if (tabId === 'backup') { loadBackupStatus(); loadUsbStatus(); _startUsbPolling(); }
+    else { _stopUsbPolling(); }
     if (tabId === 'yubikey') loadYubiKeys();
   }
 
@@ -1324,12 +1327,19 @@
     _bkDbgClear('USB-Status abfragen');
     try {
       const s = await apiFetch('/admin/backup/usb-status');
-      _bkDbg(`connected: ${s.connected}, mounted: ${s.mounted}, stale_mount: ${s.stale_mount || 'nein'}`);
+      _bkDbg(`connected: ${s.connected}, mounted: ${s.mounted}, locked: ${s.locked || false}, stale_mount: ${s.stale_mount || 'nein'}${s.remounted ? ', auto-remounted: ja' : ''}`);
       _bkDbg(`device: ${s.device || '-'}, vendor: ${s.vendor || '-'}, model: ${s.model || '-'}`);
       _bkDbg(`total: ${s.total_gb} GB, used: ${s.used_gb} GB, free: ${s.free_gb} GB`);
       const vendor = s.vendor || null;
       const model = s.model || null;
       const label = model || (vendor ? vendor + ' USB' : 'USB Backup-Partition');
+
+      // Zustand für Polling-Erkennung merken
+      _usbLastState = s.connected && s.mounted ? 'mounted'
+                    : s.connected && s.stale_mount ? 'stale'
+                    : s.connected && s.locked ? 'locked'
+                    : s.connected ? 'connected'
+                    : 'disconnected';
 
       if (s.connected && s.mounted) {
         _usbMounted = true;
@@ -1353,6 +1363,16 @@
         card.style.borderColor = '#dc262644';
         _setUsbIcon(icon, vendor, '#f87171');
         detail.textContent = `${s.device} erkannt, aber /mnt/backup-usb zeigt auf ${s.stale_mount} (altes Ger\u00e4t) \u2014 umount + remount n\u00f6tig`;
+        spaceBar.style.display = 'none';
+        detailsSection.style.display = 'none';
+      } else if (s.connected && s.locked) {
+        _usbMounted = false;
+        deviceName.textContent = label;
+        badge.textContent = 'Gesperrt';
+        badge.style.background = '#f59e0b33'; badge.style.color = '#fbbf24';
+        card.style.borderColor = '#f59e0b55';
+        _setUsbIcon(icon, vendor, '#fbbf24');
+        detail.innerHTML = `Verbunden \u2014 <strong style="color:#fbbf24">Fingerprint scannen</strong> um Backup-Partition freizuschalten`;
         spaceBar.style.display = 'none';
         detailsSection.style.display = 'none';
       } else if (s.connected) {
@@ -1386,6 +1406,42 @@
       detailsSection.style.display = 'none';
       _bkDbg(`FEHLER: ${e.name || 'Error'}: ${e.message || e}`);
     }
+  }
+
+  /* ── USB Auto-Detect Polling ────────────────────────────────── */
+  function _startUsbPolling() {
+    _stopUsbPolling();
+    _usbPollTimer = setInterval(_pollUsbStatus, 5000);
+  }
+  function _stopUsbPolling() {
+    if (_usbPollTimer) { clearInterval(_usbPollTimer); _usbPollTimer = null; }
+  }
+  async function _pollUsbStatus() {
+    try {
+      const s = await apiFetch('/admin/backup/usb-status');
+      const newState = s.connected && s.mounted ? 'mounted'
+                     : s.connected && s.stale_mount ? 'stale'
+                     : s.connected ? 'connected'
+                     : 'disconnected';
+      if (newState !== _usbLastState) {
+        const prev = _usbLastState;
+        _usbLastState = newState;
+        _bkDbg(`USB-Erkennung: ${prev || '?'} → ${newState}`);
+        // Vollständiges UI-Update
+        await loadUsbStatus();
+        // Visueller Puls bei Statuswechsel
+        const card = document.getElementById('usbStatusCard');
+        if (card) {
+          card.style.transition = 'box-shadow 0.4s ease, border-color 0.4s ease';
+          const glow = newState === 'mounted' ? '0 0 12px #4ade8066'
+                     : newState === 'connected' ? '0 0 12px #fbbf2466'
+                     : newState === 'stale' ? '0 0 12px #f8717166'
+                     : 'none';
+          card.style.boxShadow = glow;
+          setTimeout(() => { card.style.boxShadow = 'none'; }, 2000);
+        }
+      }
+    } catch(e) { /* stilles Polling — Fehler nur bei explizitem Laden anzeigen */ }
   }
 
   function _fmtBytes(bytes) {

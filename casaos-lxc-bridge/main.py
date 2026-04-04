@@ -1048,12 +1048,42 @@ async def admin_backup_usb_status(_: None = Depends(require_admin)):
         '    echo "MOUNTED:yes"; '
         '    df -B1 /mnt/backup-usb 2>/dev/null | tail -1 | awk \'{print "SPACE:" $2 ":" $3 ":" $4}\'; '
         '  elif [ -n "$TOP_MOUNT" ]; then '
-        '    echo "MOUNTED:stale:$TOP_MOUNT"; '
+        '    echo "REMOUNT:stale $TOP_MOUNT -> $DEV"; '
+        '    umount -l /mnt/backup-usb 2>/dev/null; '
+        '    mkdir -p /mnt/backup-usb; '
+        '    mount "$DEV" /mnt/backup-usb; '
+        '    if mountpoint -q /mnt/backup-usb 2>/dev/null; then '
+        '      echo "MOUNTED:yes"; '
+        '      echo "REMOUNTED:true"; '
+        '      df -B1 /mnt/backup-usb 2>/dev/null | tail -1 | awk \'{print "SPACE:" $2 ":" $3 ":" $4}\'; '
+        '    else '
+        '      echo "MOUNTED:stale:$TOP_MOUNT"; '
+        '    fi; '
         '  else '
-        '    echo "MOUNTED:no"; '
+        '    mkdir -p /mnt/backup-usb; '
+        '    mount "$DEV" /mnt/backup-usb 2>/dev/null; '
+        '    if mountpoint -q /mnt/backup-usb 2>/dev/null; then '
+        '      echo "MOUNTED:yes"; '
+        '      echo "REMOUNTED:true"; '
+        '      df -B1 /mnt/backup-usb 2>/dev/null | tail -1 | awk \'{print "SPACE:" $2 ":" $3 ":" $4}\'; '
+        '    else '
+        '      echo "MOUNTED:no"; '
+        '    fi; '
         '  fi; '
         'else '
-        '  echo "DEVICE:none"; '
+        # Fallback: USB-Gerät physisch verbunden aber Partition gesperrt (z.B. Fingerprint-USB)
+        '  USB_HW=$(lsusb 2>/dev/null | grep -iE "Lexar|JumpDrive|F35|SanDisk|Kingston" | head -1); '
+        '  if [ -n "$USB_HW" ]; then '
+        '    echo "DEVICE:locked"; '
+        '    USB_DESC=$(echo "$USB_HW" | sed "s/.*: ID [0-9a-f:]* //"); '
+        '    HW_VENDOR=$(echo "$USB_DESC" | awk "{print \\$1}"); '
+        '    HW_MODEL=$(echo "$USB_DESC" | sed "s/^[^ ]* //" | sed "s/^${HW_VENDOR} //"); '
+        '    echo "VENDOR:${HW_VENDOR:-unknown}"; '
+        '    echo "MODEL:${HW_MODEL:-unknown}"; '
+        '    echo "MOUNTED:locked"; '
+        '  else '
+        '    echo "DEVICE:none"; '
+        '  fi; '
         'fi'
     )
 
@@ -1064,6 +1094,8 @@ async def admin_backup_usb_status(_: None = Depends(require_admin)):
         status = {
             "connected": False,
             "mounted": False,
+            "locked": False,
+            "remounted": False,
             "stale_mount": None,
             "device": None,
             "vendor": None,
@@ -1077,7 +1109,10 @@ async def admin_backup_usb_status(_: None = Depends(require_admin)):
         for line in lines:
             if line.startswith("DEVICE:") and line != "DEVICE:none":
                 status["connected"] = True
-                status["device"] = line.split(":", 1)[1]
+                if line == "DEVICE:locked":
+                    status["locked"] = True
+                else:
+                    status["device"] = line.split(":", 1)[1]
             elif line.startswith("VENDOR:"):
                 v = line.split(":", 1)[1]
                 if v != "unknown":
@@ -1088,8 +1123,12 @@ async def admin_backup_usb_status(_: None = Depends(require_admin)):
                     status["model"] = m
             elif line.startswith("MOUNTED:yes"):
                 status["mounted"] = True
+            elif line.startswith("MOUNTED:locked"):
+                pass  # locked-Zustand bereits über DEVICE:locked gesetzt
             elif line.startswith("MOUNTED:stale:"):
                 status["stale_mount"] = line.split(":", 2)[2]
+            elif line.startswith("REMOUNTED:true"):
+                status["remounted"] = True
             elif line.startswith("SPACE:"):
                 parts = line.split(":")
                 if len(parts) >= 4:
