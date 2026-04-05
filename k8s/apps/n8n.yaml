@@ -1,12 +1,7 @@
-# n8n Workflow Automation (StatefulSet mit PVC)
+# n8n Workflow Automation (StatefulSet mit PVC + SQLite)
 # Migriert von: LXC 104 (192.168.10.104:5678)
-#
-# Daten-Migration vor Umstellung:
-#   pct exec 104 -- tar czf /tmp/n8n-data.tar.gz -C /home/node .n8n
-#   pct pull 104 /tmp/n8n-data.tar.gz /tmp/n8n-data.tar.gz
-#   scp /tmp/n8n-data.tar.gz root@192.168.10.150:/tmp/
-#   # Nach Pod-Start: kubectl cp /tmp/n8n-data.tar.gz jarvis-apps/n8n-0:/tmp/
-#   # kubectl exec -n jarvis-apps n8n-0 -- tar xzf /tmp/n8n-data.tar.gz -C /home/node/.n8n
+# Rollback: NPM Proxy-Host zurueck auf 192.168.10.104
+# WICHTIG: N8N_ENCRYPTION_KEY muss identisch mit LXC sein (sonst Credential-Verlust)
 ---
 apiVersion: apps/v1
 kind: StatefulSet
@@ -33,15 +28,18 @@ spec:
         ports:
         - containerPort: 5678
           name: http
+        envFrom:
+        - secretRef:
+            name: n8n-secrets
         env:
         - name: N8N_HOST
-          value: n8n.k8s.jarvis.local
+          value: "0.0.0.0"
         - name: N8N_PORT
           value: "5678"
         - name: N8N_PROTOCOL
           value: "http"
         - name: WEBHOOK_URL
-          value: "https://n8n.k8s.jarvis.local/"
+          value: "http://n8n.k8s.jarvis.local/"
         - name: GENERIC_TIMEZONE
           value: "Europe/Berlin"
         - name: TZ
