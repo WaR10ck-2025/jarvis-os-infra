@@ -1,5 +1,6 @@
 # Pionex MCP Server (Python FastAPI)
 # Migriert von: LXC 102 (192.168.10.102:8000)
+# Rollback: NPM Proxy-Host zurueck auf 192.168.10.102
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -30,11 +31,21 @@ spec:
             name: pionex-mcp-secrets
         resources:
           requests:
-            memory: "128Mi"
-            cpu: "100m"
+            memory: "64Mi"
+            cpu: "50m"
           limits:
-            memory: "512Mi"
-            cpu: "1000m"
+            memory: "256Mi"
+            cpu: "500m"
+        livenessProbe:
+          tcpSocket:
+            port: http
+          initialDelaySeconds: 15
+          periodSeconds: 30
+        readinessProbe:
+          tcpSocket:
+            port: http
+          initialDelaySeconds: 10
+          periodSeconds: 10
 ---
 apiVersion: v1
 kind: Service

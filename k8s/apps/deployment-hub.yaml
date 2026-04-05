@@ -1,5 +1,6 @@
-# GitHub Deployment Hub (Node.js)
+# GitHub Deployment Connector (Python FastAPI + SQLite)
 # Migriert von: LXC 170 (192.168.10.170:8100)
+# Rollback: NPM Proxy-Host zurueck auf 192.168.10.170
 # HINWEIS: GitHub Webhooks muessen nach Migration umgeleitet werden
 ---
 apiVersion: apps/v1
@@ -22,21 +23,50 @@ spec:
     spec:
       containers:
       - name: hub
-        image: ghcr.io/war10ck-2025/deployment-hub:latest
+        image: ghcr.io/war10ck-2025/github-deployment-connector:latest
         ports:
-        - containerPort: 8100
+        - containerPort: 8000
           name: http
         envFrom:
         - secretRef:
             name: deployment-hub-secrets
-            optional: true
         resources:
           requests:
-            memory: "128Mi"
-            cpu: "100m"
+            memory: "64Mi"
+            cpu: "50m"
           limits:
-            memory: "512Mi"
-            cpu: "1000m"
+            memory: "256Mi"
+            cpu: "500m"
+        volumeMounts:
+        - name: hub-data
+          mountPath: /app/data
+        livenessProbe:
+          tcpSocket:
+            port: http
+          initialDelaySeconds: 15
+          periodSeconds: 30
+        readinessProbe:
+          tcpSocket:
+            port: http
+          initialDelaySeconds: 10
+          periodSeconds: 10
+      volumes:
+      - name: hub-data
+        persistentVolumeClaim:
+          claimName: deployment-hub-data
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: deployment-hub-data
+  namespace: jarvis-apps
+spec:
+  accessModes:
+  - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 1Gi
 ---
 apiVersion: v1
 kind: Service
@@ -47,7 +77,7 @@ spec:
   selector:
     app: deployment-hub
   ports:
-  - port: 8100
+  - port: 8000
     targetPort: http
     name: http
 ---
@@ -68,4 +98,4 @@ spec:
           service:
             name: deployment-hub
             port:
-              number: 8100
+              number: 8000

@@ -1,5 +1,6 @@
-# Voice Assistant (Python API)
+# Voice Assistant (Python FastAPI + Whisper STT)
 # Migriert von: LXC 103 (192.168.10.103:8000)
+# Rollback: NPM Proxy-Host zurueck auf 192.168.10.103
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -21,21 +22,30 @@ spec:
     spec:
       containers:
       - name: api
-        image: ghcr.io/war10ck-2025/voice-assistant:latest
+        image: ghcr.io/war10ck-2025/ki-voice-asistent:latest
         ports:
         - containerPort: 8000
           name: http
         envFrom:
         - secretRef:
             name: voice-assistant-secrets
-            optional: true
         resources:
           requests:
-            memory: "128Mi"
+            memory: "256Mi"
             cpu: "100m"
           limits:
-            memory: "512Mi"
+            memory: "1Gi"
             cpu: "1000m"
+        livenessProbe:
+          tcpSocket:
+            port: http
+          initialDelaySeconds: 30
+          periodSeconds: 30
+        readinessProbe:
+          tcpSocket:
+            port: http
+          initialDelaySeconds: 20
+          periodSeconds: 10
 ---
 apiVersion: v1
 kind: Service
