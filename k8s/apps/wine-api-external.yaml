@@ -1,0 +1,35 @@
+# Wine API — External Service (Bridge zu Proxmox LXC 201)
+# wine-api laeuft weiterhin auf Proxmox LXC 201 (192.168.10.201:4000)
+# Dieser Service+Endpoints ermoeglicht K8s-Pods den Zugriff via DNS:
+#   http://wine-api.jarvis-apps.svc.cluster.local:4000
+#
+# Wenn wine-api spaeter nach K8s migriert wird:
+#   1. Diese Datei loeschen
+#   2. wine-api Deployment+Service erstellen
+#   3. wine-ui env API_HOST bleibt "http://wine-api:4000"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: wine-api
+  namespace: jarvis-apps
+  labels:
+    app.kubernetes.io/name: wine-api
+    jarvis-os.io/external: "true"
+spec:
+  ports:
+  - port: 4000
+    targetPort: 4000
+    name: http
+---
+apiVersion: v1
+kind: Endpoints
+metadata:
+  name: wine-api
+  namespace: jarvis-apps
+subsets:
+- addresses:
+  - ip: 192.168.10.201
+  ports:
+  - port: 4000
+    name: http

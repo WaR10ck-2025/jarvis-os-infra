@@ -1,0 +1,71 @@
+# GitHub Deployment Hub (Node.js)
+# Migriert von: LXC 170 (192.168.10.170:8100)
+# HINWEIS: GitHub Webhooks muessen nach Migration umgeleitet werden
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: deployment-hub
+  namespace: jarvis-apps
+  labels:
+    app.kubernetes.io/name: deployment-hub
+    app.kubernetes.io/component: ci-cd
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: deployment-hub
+  template:
+    metadata:
+      labels:
+        app: deployment-hub
+    spec:
+      containers:
+      - name: hub
+        image: ghcr.io/war10ck-2025/deployment-hub:latest
+        ports:
+        - containerPort: 8100
+          name: http
+        envFrom:
+        - secretRef:
+            name: deployment-hub-secrets
+            optional: true
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "1000m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: deployment-hub
+  namespace: jarvis-apps
+spec:
+  selector:
+    app: deployment-hub
+  ports:
+  - port: 8100
+    targetPort: http
+    name: http
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: deployment-hub
+  namespace: jarvis-apps
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: deploy.k8s.jarvis.local
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: deployment-hub
+            port:
+              number: 8100

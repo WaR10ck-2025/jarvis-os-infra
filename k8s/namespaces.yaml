@@ -1,0 +1,26 @@
+# J.A.R.V.I.S-OS Kubernetes Namespaces
+# Drei Kern-Namespaces fuer die Hybrid-Architektur (Proxmox + k3s)
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: jarvis-apps
+  labels:
+    app.kubernetes.io/part-of: jarvis-os
+    jarvis-os.io/tier: applications
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: jarvis-infra
+  labels:
+    app.kubernetes.io/part-of: jarvis-os
+    jarvis-os.io/tier: infrastructure
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: jarvis-system
+  labels:
+    app.kubernetes.io/part-of: jarvis-os
+    jarvis-os.io/tier: system

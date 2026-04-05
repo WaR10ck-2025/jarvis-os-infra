@@ -1,0 +1,30 @@
+# J.A.R.V.I.S-OS — Kustomize Root
+# ArgoCD synchronisiert dieses Verzeichnis automatisch.
+# Reihenfolge: Namespaces zuerst, dann Infra, dann Apps.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  # Namespaces (muessen zuerst existieren)
+  - namespaces.yaml
+
+  # Phase 1: Stateless Websites
+  - apps/sv-niederklein.yaml
+  - apps/schuetzenverein.yaml
+
+  # Phase 2: Stateless FastAPI-Services
+  - apps/setup-repair.yaml
+  - apps/pionex-mcp.yaml
+  - apps/voice-assistant.yaml
+  - apps/deployment-hub.yaml
+  - apps/wine-ui.yaml
+
+  # Phase 2: Cross-Platform Services (K8s → Proxmox)
+  - apps/wine-api-external.yaml
+
+  # Phase 3: Stateful Services
+  - apps/n8n.yaml
+
+commonLabels:
+  app.kubernetes.io/managed-by: kustomize
+  app.kubernetes.io/part-of: jarvis-os

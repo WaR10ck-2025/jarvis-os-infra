@@ -1,0 +1,70 @@
+# Voice Assistant (Python API)
+# Migriert von: LXC 103 (192.168.10.103:8000)
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: voice-assistant
+  namespace: jarvis-apps
+  labels:
+    app.kubernetes.io/name: voice-assistant
+    app.kubernetes.io/component: api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: voice-assistant
+  template:
+    metadata:
+      labels:
+        app: voice-assistant
+    spec:
+      containers:
+      - name: api
+        image: ghcr.io/war10ck-2025/voice-assistant:latest
+        ports:
+        - containerPort: 8000
+          name: http
+        envFrom:
+        - secretRef:
+            name: voice-assistant-secrets
+            optional: true
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "1000m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: voice-assistant
+  namespace: jarvis-apps
+spec:
+  selector:
+    app: voice-assistant
+  ports:
+  - port: 8000
+    targetPort: http
+    name: http
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: voice-assistant
+  namespace: jarvis-apps
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: voice-assistant.k8s.jarvis.local
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: voice-assistant
+            port:
+              number: 8000

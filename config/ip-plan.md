@@ -23,6 +23,7 @@
 | VM 100 | 100 | windows-obd2 | 192.168.10.220 | Windows 10 KVM | :8006 (noVNC) :3389 (RDP) |
 | LXC 300 | 300 | casaos-lxc-bridge | 192.168.10.180 | FastAPI Bridge | :8200 |
 | LXC 301–399 | 3xx | casaos-app-\* | 192.168.10.181–249 | CasaOS AppStore Apps (dynamisch) | variabel |
+| VM 500 | 500 | k3s-test | 192.168.10.150 | k3s Kubernetes Testcluster | :6443 (API) :30080 (HTTP) :30443 (HTTPS) |
 
 ## Externe Geräte (nicht auf Proxmox)
 
@@ -66,4 +67,10 @@ Windows VM RDP:       192.168.10.220:3389
 usbipd:               192.168.10.210:3240
 CasaOS LXC-Bridge:    http://192.168.10.180:8200
 CasaOS App-Store Apps: http://192.168.10.181–249 (dynamisch)
+
+# k3s Kubernetes Testcluster (Hybrid-Migration)
+k3s API:              https://192.168.10.150:6443
+k3s Ingress HTTP:     http://192.168.10.150:30080
+k3s Ingress HTTPS:    https://192.168.10.150:30443
+# NPM routet *.k8s.jarvis.local → 192.168.10.150:30080/30443
 ```

@@ -1,0 +1,17 @@
+# ingress-nginx Helm Values fuer J.A.R.V.I.S-OS
+# Installation:
+#   helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+#   helm install ingress-nginx ingress-nginx/ingress-nginx \
+#     --namespace ingress-nginx --create-namespace \
+#     -f k8s/infra/ingress-nginx-values.yaml
+controller:
+  service:
+    type: NodePort
+    nodePorts:
+      http: 30080
+      https: 30443
+  # NPM (LXC 110) routet *.k8s.jarvis.local → 192.168.10.150:30080/30443
+  config:
+    proxy-body-size: "50m"
+    proxy-read-timeout: "300"
+    proxy-send-timeout: "300"

@@ -1,0 +1,69 @@
+# Pionex MCP Server (Python FastAPI)
+# Migriert von: LXC 102 (192.168.10.102:8000)
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pionex-mcp
+  namespace: jarvis-apps
+  labels:
+    app.kubernetes.io/name: pionex-mcp
+    app.kubernetes.io/component: api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pionex-mcp
+  template:
+    metadata:
+      labels:
+        app: pionex-mcp
+    spec:
+      containers:
+      - name: api
+        image: ghcr.io/war10ck-2025/pionex-mcp-server:latest
+        ports:
+        - containerPort: 8000
+          name: http
+        envFrom:
+        - secretRef:
+            name: pionex-mcp-secrets
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "1000m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pionex-mcp
+  namespace: jarvis-apps
+spec:
+  selector:
+    app: pionex-mcp
+  ports:
+  - port: 8000
+    targetPort: http
+    name: http
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: pionex-mcp
+  namespace: jarvis-apps
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: pionex-mcp.k8s.jarvis.local
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: pionex-mcp
+            port:
+              number: 8000

@@ -1,0 +1,76 @@
+# Wine Manager UI (React + Nginx)
+# Migriert von: LXC 202 (192.168.10.202:3000)
+# Abhaengigkeit: wine-api bleibt auf Proxmox LXC 201 → ExternalName-Service
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: wine-ui
+  namespace: jarvis-apps
+  labels:
+    app.kubernetes.io/name: wine-ui
+    app.kubernetes.io/component: frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: wine-ui
+  template:
+    metadata:
+      labels:
+        app: wine-ui
+    spec:
+      containers:
+      - name: web
+        image: ghcr.io/war10ck-2025/wine-manager-ui:latest
+        ports:
+        - containerPort: 3000
+          name: http
+        env:
+        - name: API_HOST
+          value: "http://wine-api:4000"
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "50m"
+          limits:
+            memory: "256Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /
+            port: http
+          initialDelaySeconds: 10
+          periodSeconds: 30
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: wine-ui
+  namespace: jarvis-apps
+spec:
+  selector:
+    app: wine-ui
+  ports:
+  - port: 3000
+    targetPort: http
+    name: http
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: wine-ui
+  namespace: jarvis-apps
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: wine.k8s.jarvis.local
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: wine-ui
+            port:
+              number: 3000
