@@ -1,28 +1,27 @@
-# SV Niederklein — Vereinswebsite (React + Nginx)
-# Migriert von: LXC 105 (192.168.10.105:3001)
-# Rollback: NPM Proxy-Host zurueck auf 192.168.10.105
+# ICH-AG Website (React + Nginx)
+# Neu auf k3s deployed (kein LXC-Vorgaenger)
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: sv-niederklein
+  name: ich-ag
   namespace: jarvis-apps
   labels:
-    app.kubernetes.io/name: sv-niederklein
+    app.kubernetes.io/name: ich-ag
     app.kubernetes.io/component: website
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: sv-niederklein
+      app: ich-ag
   template:
     metadata:
       labels:
-        app: sv-niederklein
+        app: ich-ag
     spec:
       containers:
       - name: web
-        image: ghcr.io/war10ck-2025/sv-niederklein-website:latest
+        image: ghcr.io/war10ck-2025/ich-ag-website:latest
         ports:
         - containerPort: 80
           name: http
@@ -49,11 +48,11 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: sv-niederklein
+  name: ich-ag
   namespace: jarvis-apps
 spec:
   selector:
-    app: sv-niederklein
+    app: ich-ag
   ports:
   - port: 80
     targetPort: http
@@ -62,18 +61,18 @@ spec:
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: sv-niederklein
+  name: ich-ag
   namespace: jarvis-apps
 spec:
   ingressClassName: nginx
   rules:
-  - host: sv-niederklein.k8s.jarvis.local
+  - host: ich-ag.k8s.jarvis.local
     http:
       paths:
       - path: /
         pathType: Prefix
         backend:
           service:
-            name: sv-niederklein
+            name: ich-ag
             port:
               number: 80

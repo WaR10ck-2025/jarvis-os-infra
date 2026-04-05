@@ -22,9 +22,9 @@ spec:
     spec:
       containers:
       - name: web
-        image: ghcr.io/war10ck-2025/schuetzenverein:latest
+        image: ghcr.io/war10ck-2025/schuetzenverein-niederklein-website:latest
         ports:
-        - containerPort: 3002
+        - containerPort: 80
           name: http
         resources:
           requests:
@@ -55,7 +55,7 @@ spec:
   selector:
     app: schuetzenverein
   ports:
-  - port: 3002
+  - port: 80
     targetPort: http
     name: http
 ---
@@ -76,4 +76,4 @@ spec:
           service:
             name: schuetzenverein
             port:
-              number: 3002
+              number: 80

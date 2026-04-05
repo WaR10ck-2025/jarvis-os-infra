@@ -11,6 +11,7 @@ resources:
   # Phase 1: Stateless Websites
   - apps/sv-niederklein.yaml
   - apps/schuetzenverein.yaml
+  - apps/ich-ag.yaml
 
   # Phase 2: Stateless FastAPI-Services
   - apps/setup-repair.yaml
