@@ -1,0 +1,10 @@
+# ich-ag Website
+image:
+  repository: war10ck-2025/ich-ag-website
+containerPort: 80
+service:
+  port: 80
+ingress:
+  host: ich-ag.k8s.jarvis.local
+labels:
+  component: website

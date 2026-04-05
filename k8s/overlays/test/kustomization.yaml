@@ -1,0 +1,25 @@
+# J.A.R.V.I.S-OS Test-Overlay (k3s VM 500, 192.168.10.150)
+# Aktuelle Umgebung: Einzelner k3s-Node auf Proxmox-Host
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../  # Base (k8s/ Root-Verzeichnis)
+
+# Test-spezifische Labels
+commonLabels:
+  jarvis-os.io/environment: test
+
+# Ressourcen-Limits fuer Test (4GB RAM VM)
+patches:
+  # Websites: Minimale Ressourcen im Test
+  - target:
+      kind: Deployment
+      labelSelector: app.kubernetes.io/component=website
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/memory
+        value: "128Mi"
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/cpu
+        value: "250m"

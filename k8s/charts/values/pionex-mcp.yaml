@@ -1,0 +1,24 @@
+# pionex-mcp FastAPI Service
+image:
+  repository: war10ck-2025/pionex-mcp-server
+containerPort: 8000
+service:
+  port: 8000
+ingress:
+  host: pionex-mcp.k8s.jarvis.local
+secrets:
+  enabled: true
+  name: pionex-mcp-secrets
+probes:
+  type: tcp
+  initialDelaySeconds: 15
+  periodSeconds: 30
+labels:
+  component: api
+resources:
+  requests:
+    memory: "64Mi"
+    cpu: "50m"
+  limits:
+    memory: "512Mi"
+    cpu: "1000m"

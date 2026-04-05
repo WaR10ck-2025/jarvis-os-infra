@@ -1,0 +1,31 @@
+image:
+  repository: n8nio/n8n
+  tag: latest
+
+secretName: n8n-secrets
+
+env:
+  N8N_HOST: "0.0.0.0"
+  N8N_PORT: "5678"
+  N8N_PROTOCOL: "http"
+  WEBHOOK_URL: "http://n8n.k8s.jarvis.local/"
+  GENERIC_TIMEZONE: "Europe/Berlin"
+  TZ: "Europe/Berlin"
+
+persistence:
+  size: 16Gi
+  storageClass: local-path
+
+ingress:
+  host: n8n.k8s.jarvis.local
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+
+resources:
+  requests:
+    memory: "512Mi"
+    cpu: "200m"
+  limits:
+    memory: "1Gi"
+    cpu: "2000m"

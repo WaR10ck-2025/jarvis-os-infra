@@ -1,0 +1,21 @@
+# deployment-hub FastAPI Service (mit PVC fuer SQLite)
+image:
+  repository: war10ck-2025/github-deployment-connector
+containerPort: 8000
+service:
+  port: 8000
+ingress:
+  host: deploy.k8s.jarvis.local
+secrets:
+  enabled: true
+  name: deployment-hub-secrets
+persistence:
+  enabled: true
+  size: 1Gi
+  mountPath: /app/data
+probes:
+  type: tcp
+  initialDelaySeconds: 15
+  periodSeconds: 30
+labels:
+  component: api

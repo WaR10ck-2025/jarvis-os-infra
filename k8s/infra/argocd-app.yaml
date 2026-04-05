@@ -1,0 +1,33 @@
+# ArgoCD Application fuer J.A.R.V.I.S-OS
+# Erst deployen wenn ArgoCD auf Prod-Cluster laeuft (Phase 4)
+# Installation: kubectl apply -f k8s/infra/argocd-app.yaml
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: jarvis-os
+  namespace: argocd
+  labels:
+    app.kubernetes.io/part-of: jarvis-os
+spec:
+  project: default
+  source:
+    # GitHub Repo (nach Rename)
+    repoURL: https://github.com/WaR10ck-2025/jarvis-os-infra.git
+    # Test: overlays/test | Prod: overlays/prod
+    path: k8s/overlays/test
+    targetRevision: main
+  destination:
+    server: https://kubernetes.default.svc
+  syncPolicy:
+    automated:
+      prune: true      # Geloeschte Manifests werden entfernt
+      selfHeal: true   # Manuelle Aenderungen werden zurueckgesetzt
+    syncOptions:
+      - CreateNamespace=true
+    retry:
+      limit: 3
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m

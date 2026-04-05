@@ -1,0 +1,154 @@
+# K8s Backup CronJob fuer J.A.R.V.I.S-OS
+# Sichert: n8n SQLite DB, deployment-hub SQLite DB
+# Schedule: Taeglich um 03:00 UTC (04:00/05:00 CET/CEST)
+# Backup-Ziel: PVC (lokal) — spaeter: S3/NFS/USB
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: jarvis-backup
+  namespace: jarvis-system
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 8Gi
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: backup-script
+  namespace: jarvis-system
+data:
+  backup.sh: |
+    #!/bin/sh
+    set -e
+    TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+    BACKUP_DIR="/backups/${TIMESTAMP}"
+    mkdir -p "${BACKUP_DIR}"
+
+    echo "[${TIMESTAMP}] === J.A.R.V.I.S-OS Backup Start ==="
+
+    # 1. n8n SQLite (Glob-Pattern statt find — robuster im Container)
+    echo "  Backing up n8n..."
+    for db in /var/lib/rancher/k3s/storage/*n8n-data*/database.sqlite; do
+      if [ -f "$db" ]; then
+        cp "$db" "${BACKUP_DIR}/n8n-database.sqlite"
+        CONFIG_DIR=$(dirname "$db")
+        [ -f "${CONFIG_DIR}/config" ] && cp "${CONFIG_DIR}/config" "${BACKUP_DIR}/n8n-config.json"
+        echo "  n8n: OK ($(du -sh "${BACKUP_DIR}/n8n-database.sqlite" | cut -f1))"
+        break
+      fi
+    done
+    [ ! -f "${BACKUP_DIR}/n8n-database.sqlite" ] && echo "  n8n: SKIP (DB nicht gefunden)"
+
+    # 2. deployment-hub SQLite
+    echo "  Backing up deployment-hub..."
+    for db in /var/lib/rancher/k3s/storage/*deployment-hub*/hub.db; do
+      if [ -f "$db" ]; then
+        cp "$db" "${BACKUP_DIR}/hub.db"
+        echo "  deployment-hub: OK ($(du -sh "${BACKUP_DIR}/hub.db" | cut -f1))"
+        break
+      fi
+    done
+    [ ! -f "${BACKUP_DIR}/hub.db" ] && echo "  deployment-hub: SKIP (DB nicht gefunden)"
+
+    # 3. Manifest-Export (alle jarvis-* Namespaces)
+    echo "  Exporting manifests..."
+    for ns in jarvis-apps jarvis-infra jarvis-system; do
+      kubectl get all,ingress,pvc,secret -n "$ns" -o yaml > "${BACKUP_DIR}/${ns}-export.yaml" 2>/dev/null || true
+    done
+    echo "  Manifests: OK"
+
+    # 4. Aufraumen: Backups aelter als 7 Tage loeschen
+    echo "  Cleaning old backups..."
+    find /backups -maxdepth 1 -type d -mtime +7 -exec rm -rf {} \; 2>/dev/null || true
+    TOTAL=$(du -sh "${BACKUP_DIR}" | cut -f1)
+    COUNT=$(ls -d /backups/2* 2>/dev/null | wc -l)
+    echo "[$(date +%Y%m%d-%H%M%S)] === Backup komplett: ${TOTAL}, ${COUNT} Versionen ==="
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: jarvis-backup
+  namespace: jarvis-system
+  labels:
+    app.kubernetes.io/name: jarvis-backup
+    app.kubernetes.io/component: backup
+    app.kubernetes.io/part-of: jarvis-os
+spec:
+  schedule: "0 3 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      activeDeadlineSeconds: 600
+      template:
+        spec:
+          serviceAccountName: jarvis-backup
+          restartPolicy: OnFailure
+          securityContext:
+            runAsUser: 0
+          containers:
+          - name: backup
+            image: bitnami/kubectl:latest
+            command: ["/bin/sh", "/scripts/backup.sh"]
+            volumeMounts:
+            - name: backup-script
+              mountPath: /scripts
+            - name: backup-storage
+              mountPath: /backups
+            - name: k3s-storage
+              mountPath: /var/lib/rancher/k3s/storage
+              readOnly: true
+            resources:
+              requests:
+                memory: "64Mi"
+                cpu: "50m"
+              limits:
+                memory: "256Mi"
+                cpu: "500m"
+          volumes:
+          - name: backup-script
+            configMap:
+              name: backup-script
+              defaultMode: 0755
+          - name: backup-storage
+            persistentVolumeClaim:
+              claimName: jarvis-backup
+          - name: k3s-storage
+            hostPath:
+              path: /var/lib/rancher/k3s/storage
+              type: Directory
+---
+# ServiceAccount + RBAC fuer kubectl Zugriff
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: jarvis-backup
+  namespace: jarvis-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: jarvis-backup-reader
+rules:
+- apiGroups: ["", "apps", "networking.k8s.io"]
+  resources: ["*"]
+  verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: jarvis-backup-reader
+subjects:
+- kind: ServiceAccount
+  name: jarvis-backup
+  namespace: jarvis-system
+roleRef:
+  kind: ClusterRole
+  name: jarvis-backup-reader
+  apiGroup: rbac.authorization.k8s.io

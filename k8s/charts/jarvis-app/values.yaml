@@ -1,0 +1,53 @@
+# Default Values fuer jarvis-app Chart
+# Override pro Service in k8s/charts/values/<service>.yaml
+
+replicaCount: 1
+
+image:
+  registry: ghcr.io
+  repository: war10ck-2025/REQUIRED
+  tag: latest
+  pullPolicy: Always
+
+containerPort: 80
+
+service:
+  port: 80
+
+ingress:
+  enabled: true
+  host: REQUIRED.k8s.jarvis.local
+  annotations: {}
+
+# Secrets (envFrom secretRef)
+secrets:
+  enabled: false
+  name: ""
+
+# Zusaetzliche Env-Vars (nicht-sensitive)
+env: {}
+
+# Persistent Volume (fuer FastAPI mit SQLite)
+persistence:
+  enabled: false
+  size: 1Gi
+  storageClass: local-path
+  mountPath: /app/data
+
+resources:
+  requests:
+    memory: "64Mi"
+    cpu: "50m"
+  limits:
+    memory: "256Mi"
+    cpu: "500m"
+
+# Health Checks
+probes:
+  type: http  # http | tcp
+  path: /
+  initialDelaySeconds: 10
+  periodSeconds: 30
+
+labels:
+  component: website

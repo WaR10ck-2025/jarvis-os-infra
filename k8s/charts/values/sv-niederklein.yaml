@@ -1,0 +1,10 @@
+# sv-niederklein Website
+image:
+  repository: war10ck-2025/sv-niederklein-website
+containerPort: 80
+service:
+  port: 80
+ingress:
+  host: sv-niederklein.k8s.jarvis.local
+labels:
+  component: website

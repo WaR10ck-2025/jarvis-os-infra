@@ -1,0 +1,9 @@
+apiVersion: v2
+name: jarvis-app
+description: Generisches J.A.R.V.I.S-OS Application Chart (Websites + FastAPI)
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+maintainers:
+  - name: WaR10ck
+    email: Elias.Boos.000@gmail.com

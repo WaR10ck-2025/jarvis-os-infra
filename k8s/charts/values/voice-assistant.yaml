@@ -1,0 +1,24 @@
+# voice-assistant FastAPI Service
+image:
+  repository: war10ck-2025/ki-voice-asistent
+containerPort: 8000
+service:
+  port: 8000
+ingress:
+  host: voice-assistant.k8s.jarvis.local
+secrets:
+  enabled: true
+  name: voice-assistant-secrets
+probes:
+  type: tcp
+  initialDelaySeconds: 15
+  periodSeconds: 30
+labels:
+  component: api
+resources:
+  requests:
+    memory: "128Mi"
+    cpu: "100m"
+  limits:
+    memory: "1Gi"
+    cpu: "2000m"

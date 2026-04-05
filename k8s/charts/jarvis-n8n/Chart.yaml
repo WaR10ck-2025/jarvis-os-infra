@@ -1,0 +1,9 @@
+apiVersion: v2
+name: jarvis-n8n
+description: n8n Workflow Automation fuer J.A.R.V.I.S-OS (StatefulSet + PVC)
+type: application
+version: 0.1.0
+appVersion: "latest"
+maintainers:
+  - name: WaR10ck
+    email: Elias.Boos.000@gmail.com
