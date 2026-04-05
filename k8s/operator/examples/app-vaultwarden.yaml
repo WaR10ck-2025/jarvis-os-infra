@@ -1,0 +1,23 @@
+apiVersion: jarvis-os.io/v1
+kind: JarvisApp
+metadata:
+  name: vaultwarden
+  namespace: user-alice
+spec:
+  appId: Vaultwarden
+  image: vaultwarden/server:latest
+  port: 80
+  ingress:
+    enabled: true
+    host: vault.user-alice.k8s.jarvis.local
+  resources:
+    requests:
+      memory: "64Mi"
+      cpu: "50m"
+    limits:
+      memory: "256Mi"
+      cpu: "500m"
+  persistence:
+    enabled: true
+    size: "5Gi"
+    mountPath: /data

@@ -1,0 +1,118 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: jarvisapps.jarvis-os.io
+spec:
+  group: jarvis-os.io
+  names:
+    kind: JarvisApp
+    listKind: JarvisAppList
+    plural: jarvisapps
+    singular: jarvisapp
+    shortNames:
+      - ja
+  scope: Namespaced
+  versions:
+    - name: v1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          required: ["spec"]
+          properties:
+            spec:
+              type: object
+              required: ["appId"]
+              properties:
+                appId:
+                  type: string
+                  description: "App-Identifier (z.B. Vaultwarden, Nextcloud)"
+                helmChart:
+                  type: string
+                  description: "Helm Chart Referenz (z.B. vaultwarden/vaultwarden)"
+                helmRepo:
+                  type: string
+                  description: "Helm Repo URL (z.B. https://k8s-at-home.com/charts)"
+                helmValues:
+                  type: object
+                  x-kubernetes-preserve-unknown-fields: true
+                  description: "Helm Values als YAML-Objekt"
+                image:
+                  type: string
+                  description: "Container-Image (Alternative zu Helm)"
+                port:
+                  type: integer
+                  minimum: 1
+                  maximum: 65535
+                  description: "Primaerer Service-Port"
+                ingress:
+                  type: object
+                  properties:
+                    enabled:
+                      type: boolean
+                      default: true
+                    host:
+                      type: string
+                      description: "Custom Hostname (default: {appId}.user-{tenant}.k8s.jarvis.local)"
+                resources:
+                  type: object
+                  properties:
+                    requests:
+                      type: object
+                      properties:
+                        memory:
+                          type: string
+                          default: "64Mi"
+                        cpu:
+                          type: string
+                          default: "50m"
+                    limits:
+                      type: object
+                      properties:
+                        memory:
+                          type: string
+                          default: "512Mi"
+                        cpu:
+                          type: string
+                          default: "1"
+                persistence:
+                  type: object
+                  properties:
+                    enabled:
+                      type: boolean
+                      default: false
+                    size:
+                      type: string
+                      default: "5Gi"
+                    mountPath:
+                      type: string
+                      default: "/data"
+            status:
+              type: object
+              properties:
+                phase:
+                  type: string
+                  enum: ["Pending", "Deploying", "Running", "Error", "Deleting"]
+                message:
+                  type: string
+                endpoint:
+                  type: string
+                lastUpdated:
+                  type: string
+                  format: date-time
+      subresources:
+        status: {}
+      additionalPrinterColumns:
+        - name: App
+          type: string
+          jsonPath: .spec.appId
+        - name: Phase
+          type: string
+          jsonPath: .status.phase
+        - name: Endpoint
+          type: string
+          jsonPath: .status.endpoint
+        - name: Age
+          type: date
+          jsonPath: .metadata.creationTimestamp

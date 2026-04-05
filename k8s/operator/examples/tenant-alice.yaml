@@ -1,0 +1,12 @@
+apiVersion: jarvis-os.io/v1
+kind: JarvisTenant
+metadata:
+  name: alice
+spec:
+  username: alice
+  storageQuota: "100Gi"
+  cpuLimit: "4"
+  memoryLimit: "8Gi"
+  appSlotLimit: 10
+  tailscaleEnabled: true
+  dashboardEnabled: true

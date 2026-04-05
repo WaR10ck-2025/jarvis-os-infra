@@ -1,0 +1,49 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jarvis-operator
+  namespace: jarvis-system
+  labels:
+    app.kubernetes.io/name: jarvis-operator
+    app.kubernetes.io/component: operator
+    app.kubernetes.io/part-of: jarvis-os
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: jarvis-operator
+  template:
+    metadata:
+      labels:
+        app: jarvis-operator
+        app.kubernetes.io/name: jarvis-operator
+        app.kubernetes.io/part-of: jarvis-os
+    spec:
+      serviceAccountName: jarvis-operator
+      containers:
+        - name: operator
+          image: ghcr.io/war10ck-2025/jarvis-operator:latest
+          command: ["kopf", "run", "/app/operator.py", "--verbose", "--liveness=http://0.0.0.0:8080/healthz"]
+          ports:
+            - containerPort: 8080
+              name: health
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: health
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+            limits:
+              memory: "256Mi"
+              cpu: "500m"
+          env:
+            - name: OPERATOR_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace

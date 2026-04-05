@@ -1,0 +1,90 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: jarvistenants.jarvis-os.io
+spec:
+  group: jarvis-os.io
+  names:
+    kind: JarvisTenant
+    listKind: JarvisTenantList
+    plural: jarvistenants
+    singular: jarvistenant
+    shortNames:
+      - jt
+  scope: Cluster
+  versions:
+    - name: v1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          required: ["spec"]
+          properties:
+            spec:
+              type: object
+              required: ["username"]
+              properties:
+                username:
+                  type: string
+                  pattern: "^[a-z][a-z0-9-]{1,30}[a-z0-9]$"
+                  description: "Lowercase username, wird zu Namespace user-{username}"
+                storageQuota:
+                  type: string
+                  default: "50Gi"
+                  description: "Max Storage fuer den Tenant (z.B. 100Gi)"
+                cpuLimit:
+                  type: string
+                  default: "4"
+                  description: "Max CPU-Cores fuer den Tenant"
+                memoryLimit:
+                  type: string
+                  default: "8Gi"
+                  description: "Max RAM fuer den Tenant"
+                appSlotLimit:
+                  type: integer
+                  default: 10
+                  minimum: 1
+                  maximum: 50
+                  description: "Max Anzahl JarvisApps in diesem Namespace"
+                tailscaleEnabled:
+                  type: boolean
+                  default: false
+                  description: "Headscale-User + Namespace anlegen"
+                dashboardEnabled:
+                  type: boolean
+                  default: true
+                  description: "CasaOS-artiges Dashboard deployen"
+            status:
+              type: object
+              properties:
+                phase:
+                  type: string
+                  enum: ["Pending", "Ready", "Error", "Deleting"]
+                namespace:
+                  type: string
+                message:
+                  type: string
+                appCount:
+                  type: integer
+                lastUpdated:
+                  type: string
+                  format: date-time
+      subresources:
+        status: {}
+      additionalPrinterColumns:
+        - name: Username
+          type: string
+          jsonPath: .spec.username
+        - name: Phase
+          type: string
+          jsonPath: .status.phase
+        - name: Namespace
+          type: string
+          jsonPath: .status.namespace
+        - name: Apps
+          type: integer
+          jsonPath: .status.appCount
+        - name: Age
+          type: date
+          jsonPath: .metadata.creationTimestamp
