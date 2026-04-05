@@ -1,5 +1,5 @@
 #!/bin/bash
-# create-rescue-usb.sh — OpenClaw Rescue-USB erstellen
+# create-rescue-usb.sh — J.A.R.V.I.S-OS Rescue-USB erstellen
 #
 # Erstellt einen bootfähigen USB-Stick der SOWOHL das Proxmox-ISO
 # als auch alle Backup-Daten auf einem einzigen Datenträger enthält.
@@ -10,13 +10,13 @@
 #    Leeren USB-Stick neu partitionieren:
 #    Partition 1: bootbares ISO  |  Partition 2: exFAT, Backup
 #
-#    create-rescue-usb.sh --iso proxmox-openclaw.iso --device /dev/sdX
+#    create-rescue-usb.sh --iso proxmox-jarvis.iso --device /dev/sdX
 #
 #  Modus B — Ventoy (bestehende Ventoy-Installation, empfohlen)
 #    Nur Dateien kopieren, keine Repartitionierung:
-#    ISO + openclaw-backups/ Ordner in die exFAT Ventoy-Partition
+#    ISO + jarvis-os-backups/ Ordner in die exFAT Ventoy-Partition
 #
-#    create-rescue-usb.sh --ventoy --device /dev/sdX --iso proxmox-openclaw.iso
+#    create-rescue-usb.sh --ventoy --device /dev/sdX --iso proxmox-jarvis.iso
 #
 #  Modus C — Ventoy + dedizierte Partition
 #    ISO in Ventoy-Partition + neue exFAT-Partition 3 für Backup-Daten
@@ -45,13 +45,13 @@ hdr()  { echo -e "\n${BOLD}$*${NC}"; }
 
 usage() {
   echo ""
-  echo -e "${BOLD}OpenClaw Rescue-USB erstellen${NC}"
+  echo -e "${BOLD}J.A.R.V.I.S-OS Rescue-USB erstellen${NC}"
   echo ""
   echo "  Modus A — Standard (neuer USB-Stick):"
-  echo "    $0 --iso proxmox-openclaw.iso --device /dev/sdX [--copy-from /mnt/backup-usb]"
+  echo "    $0 --iso proxmox-jarvis.iso --device /dev/sdX [--copy-from /mnt/backup-usb]"
   echo ""
   echo "  Modus B — Ventoy (bestehende Installation):"
-  echo "    $0 --ventoy --device /dev/sdX --iso proxmox-openclaw.iso [--copy-from /mnt/backup-usb]"
+  echo "    $0 --ventoy --device /dev/sdX --iso proxmox-jarvis.iso [--copy-from /mnt/backup-usb]"
   echo ""
   echo "  Modus C — Ventoy + eigene Backup-Partition:"
   echo "    $0 --ventoy --add-partition --device /dev/sdX [--copy-from /mnt/backup-usb]"
@@ -117,7 +117,7 @@ if [ "$VENTOY_MODE" = "true" ] && [ "$ADD_PARTITION" = "false" ]; then
   [ -z "$VENTOY_PART" ] && err "Keine Ventoy-Partition auf $DEVICE gefunden (Label='Ventoy'). Ist Ventoy installiert?"
 
   info "Ventoy-Partition: $VENTOY_PART"
-  VENTOY_MOUNT="/mnt/openclaw-ventoy-$$"
+  VENTOY_MOUNT="/mnt/jarvis-ventoy-$$"
   mkdir -p "$VENTOY_MOUNT"
   trap "umount '$VENTOY_MOUNT' 2>/dev/null; rmdir '$VENTOY_MOUNT' 2>/dev/null; true" EXIT
 
@@ -136,16 +136,16 @@ if [ "$VENTOY_MODE" = "true" ] && [ "$ADD_PARTITION" = "false" ]; then
   fi
 
   # Backup-Verzeichnisstruktur erstellen
-  info "openclaw-backups/ Verzeichnisstruktur erstellen..."
-  mkdir -p "${VENTOY_MOUNT}/openclaw-backups/dump"
-  mkdir -p "${VENTOY_MOUNT}/openclaw-backups/configs"
-  mkdir -p "${VENTOY_MOUNT}/openclaw-backups/appdata"
-  mkdir -p "${VENTOY_MOUNT}/openclaw-backups/keys"
+  info "jarvis-os-backups/ Verzeichnisstruktur erstellen..."
+  mkdir -p "${VENTOY_MOUNT}/jarvis-os-backups/dump"
+  mkdir -p "${VENTOY_MOUNT}/jarvis-os-backups/configs"
+  mkdir -p "${VENTOY_MOUNT}/jarvis-os-backups/appdata"
+  mkdir -p "${VENTOY_MOUNT}/jarvis-os-backups/keys"
   ok "Verzeichnisstruktur erstellt"
 
   # Backup-Daten kopieren
   if [ -n "$COPY_FROM" ]; then
-    _copy_backups "$COPY_FROM" "${VENTOY_MOUNT}/openclaw-backups"
+    _copy_backups "$COPY_FROM" "${VENTOY_MOUNT}/jarvis-os-backups"
   fi
 
   umount "$VENTOY_MOUNT" && rmdir "$VENTOY_MOUNT"
@@ -157,11 +157,11 @@ if [ "$VENTOY_MODE" = "true" ] && [ "$ADD_PARTITION" = "false" ]; then
   echo ""
   echo "  Inhalt:"
   echo "    ISO:     $(basename "${ISO_FILE:-kein ISO}")"
-  echo "    Backups: ${VENTOY_MOUNT}/openclaw-backups/ (Frei: ${VENTOY_FREE})"
+  echo "    Backups: ${VENTOY_MOUNT}/jarvis-os-backups/ (Frei: ${VENTOY_FREE})"
   echo ""
   echo "  Nächste Schritte:"
   echo "    1. USB einstecken + booten → Ventoy-Menü"
-  echo "    2. proxmox-openclaw.iso auswählen"
+  echo "    2. proxmox-jarvis.iso auswählen"
   echo "    3. Proxmox installiert sich automatisch"
   echo "    4. First-Boot zeigt Menü → [2] Disaster Recovery wählen"
   exit 0
@@ -200,10 +200,10 @@ if [ "$VENTOY_MODE" = "true" ] && [ "$ADD_PARTITION" = "true" ]; then
 
   # Backup-Daten kopieren
   if [ -n "$COPY_FROM" ]; then
-    BACKUP_MOUNT="/mnt/openclaw-bakpart-$$"
+    BACKUP_MOUNT="/mnt/jarvis-bakpart-$$"
     mkdir -p "$BACKUP_MOUNT"
     mount "$BACKUP_PART" "$BACKUP_MOUNT"
-    _copy_backups "$COPY_FROM" "${BACKUP_MOUNT}/openclaw-backups"
+    _copy_backups "$COPY_FROM" "${BACKUP_MOUNT}/jarvis-os-backups"
     umount "$BACKUP_MOUNT" && rmdir "$BACKUP_MOUNT"
   fi
 
@@ -219,7 +219,7 @@ fi
 # ══════════════════════════════════════════════════════════════════════════
 hdr "Modus A: Standard Rescue-USB (dd + Dual-Partition)"
 
-[ -z "$ISO_FILE" ] && err "Kein --iso angegeben. Beispiel: --iso proxmox-openclaw.iso"
+[ -z "$ISO_FILE" ] && err "Kein --iso angegeben. Beispiel: --iso proxmox-jarvis.iso"
 [ ! -f "$ISO_FILE" ] && err "ISO-Datei nicht gefunden: $ISO_FILE"
 
 # Größen-Check (min. 8 GB)
@@ -282,22 +282,22 @@ ok "Partition 2 erstellt: $BACKUP_PART (Backup exFAT)"
 # Schritt 4: Backup-Daten kopieren (optional)
 hdr "Schritt 4/4: Backup-Daten..."
 if [ -n "$COPY_FROM" ]; then
-  BACKUP_MOUNT="/mnt/openclaw-newusb-$$"
+  BACKUP_MOUNT="/mnt/jarvis-newusb-$$"
   mkdir -p "$BACKUP_MOUNT"
   mount "$BACKUP_PART" "$BACKUP_MOUNT"
-  _copy_backups "$COPY_FROM" "${BACKUP_MOUNT}/openclaw-backups"
+  _copy_backups "$COPY_FROM" "${BACKUP_MOUNT}/jarvis-os-backups"
   umount "$BACKUP_MOUNT" && rmdir "$BACKUP_MOUNT"
 else
   # Struktur anlegen damit first-boot.sh sie finden kann
-  BACKUP_MOUNT="/mnt/openclaw-newusb-$$"
+  BACKUP_MOUNT="/mnt/jarvis-newusb-$$"
   mkdir -p "$BACKUP_MOUNT"
   mount "$BACKUP_PART" "$BACKUP_MOUNT"
-  mkdir -p "${BACKUP_MOUNT}/openclaw-backups/"{dump,configs,appdata,keys}
+  mkdir -p "${BACKUP_MOUNT}/jarvis-os-backups/"{dump,configs,appdata,keys}
   umount "$BACKUP_MOUNT" && rmdir "$BACKUP_MOUNT"
   warn "Keine Backup-Daten kopiert — Ordnerstruktur angelegt"
   info "Backup-Daten manuell kopieren:"
   info "  mount $BACKUP_PART /mnt/backup-usb"
-  info "  rsync -av /mnt/old-backup-usb/openclaw-backups/ /mnt/backup-usb/openclaw-backups/"
+  info "  rsync -av /mnt/old-backup-usb/jarvis-os-backups/ /mnt/backup-usb/jarvis-os-backups/"
 fi
 
 # ── Abschluss ────────────────────────────────────────────────────────────
@@ -325,17 +325,17 @@ _copy_backups() {
   local src="$1" dst="$2"
   mkdir -p "$dst"/{dump,configs,appdata,keys}
 
-  if [ ! -d "${src}/openclaw-backups" ]; then
-    warn "--copy-from: Kein openclaw-backups/ Verzeichnis unter $src — übersprungen"
+  if [ ! -d "${src}/jarvis-os-backups" ]; then
+    warn "--copy-from: Kein jarvis-os-backups/ Verzeichnis unter $src — übersprungen"
     return
   fi
 
   info "Backup-Daten kopieren von $src..."
-  COPY_SIZE=$(du -sh "${src}/openclaw-backups" 2>/dev/null | cut -f1)
+  COPY_SIZE=$(du -sh "${src}/jarvis-os-backups" 2>/dev/null | cut -f1)
   info "  Größe: $COPY_SIZE"
 
   rsync -ah --progress \
-    "${src}/openclaw-backups/" \
+    "${src}/jarvis-os-backups/" \
     "$dst/"
 
   ok "Backup-Daten kopiert ($COPY_SIZE)"

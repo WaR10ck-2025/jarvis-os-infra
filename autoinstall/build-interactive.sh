@@ -1,16 +1,16 @@
 #!/bin/bash
-# build-interactive.sh — Interaktive OpenClaw ISO (Proxmox-Wizard + first-boot)
+# build-interactive.sh — Interaktive J.A.R.V.I.S-OS ISO (Proxmox-Wizard + first-boot)
 #
-# Erstellt proxmox-openclaw-interactive.iso via squashfs-Modifikation:
+# Erstellt proxmox-jarvis-interactive.iso via squashfs-Modifikation:
 #   - Kein answer.toml → Proxmox Installer-Wizard bleibt aktiv
 #   - first-boot.sh wird in squashfs injiziert → läuft nach Installation
 #
 # Verwendung (WSL2 Ubuntu):
-#   sudo bash /mnt/c/Daten/Projekte/openclaw-proxmox/autoinstall/build-interactive.sh
+#   sudo bash /mnt/c/Daten/Projekte/jarvis-os-infra/autoinstall/build-interactive.sh
 #
 set -e
 
-SCRIPT_DIR="/mnt/c/Daten/Projekte/openclaw-proxmox/autoinstall"
+SCRIPT_DIR="/mnt/c/Daten/Projekte/jarvis-os-infra/autoinstall"
 PVE_ISO="/mnt/c/Users/WaR10ck/Downloads/proxmox-ve_9.1-1.iso"
 
 echo "► Abhängigkeiten prüfen..."

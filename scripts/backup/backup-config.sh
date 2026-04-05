@@ -32,7 +32,7 @@ notify() {
     local prio="default"; local tags="floppy_disk"
     [ "$status" = "error" ] && prio="urgent" && tags="warning"
     curl -s -X POST "$NTFY_URL" \
-      -H "Title: OpenClaw Backup L1 ${status^^}" \
+      -H "Title: J.A.R.V.I.S-OS Backup L1 ${status^^}" \
       -H "Priority: $prio" -H "Tags: $tags" \
       -d "$msg" -o /dev/null 2>/dev/null || true
   fi
@@ -146,7 +146,7 @@ collect_from_lxc() {
   fi
 }
 
-collect_from_lxc 120 "/opt/openclaw-proxmox/casaos-lxc-bridge/.env" "lxc120-casaos-bridge.env"
+collect_from_lxc 120 "/opt/jarvis-os-infra/jarvis-lxc-bridge/.env" "lxc120-casaos-bridge.env"
 collect_from_lxc 109 "/opt/nextcloud/.env"                           "lxc109-nextcloud.env"
 collect_from_lxc 104 "/root/docker/n8n/.env"                         "lxc104-n8n.env"
 collect_from_lxc 125 "/opt/authentik/.env"                           "lxc125-authentik.env"
@@ -178,11 +178,11 @@ log_ok ".env-Files gesammelt"
 
 # ── answer.toml sichern (falls vorhanden) ────────────────────────────────────
 log "  → answer.toml prüfen..."
-if [ -f "/root/openclaw-secrets/answer.toml" ]; then
-  cp "/root/openclaw-secrets/answer.toml" "${WORK_DIR}/answer.toml"
+if [ -f "/root/jarvis-secrets/answer.toml" ]; then
+  cp "/root/jarvis-secrets/answer.toml" "${WORK_DIR}/answer.toml"
   log_ok "answer.toml eingeschlossen"
 else
-  log_warn "answer.toml nicht gefunden (/root/openclaw-secrets/answer.toml)"
+  log_warn "answer.toml nicht gefunden (/root/jarvis-secrets/answer.toml)"
 fi
 
 # ── Meta-Info ─────────────────────────────────────────────────────────────────
@@ -272,9 +272,9 @@ if [ "$TARGET_GITHUB" = "true" ] && [ "${SKIP_GITHUB:-false}" = "false" ]; then
     cp "$ENCRYPTED" "${GITHUB_WORK_DIR}/archive/${DATE_DIR}/${BACKUP_FILENAME}"
 
     # answer.toml separat verschlüsseln (falls vorhanden und noch nicht eingeschlossen)
-    if [ -f "/root/openclaw-secrets/answer.toml" ] && [ -n "$AGE_PUBKEY" ]; then
+    if [ -f "/root/jarvis-secrets/answer.toml" ] && [ -n "$AGE_PUBKEY" ]; then
       age --encrypt --recipient "$AGE_PUBKEY" \
-        "/root/openclaw-secrets/answer.toml" \
+        "/root/jarvis-secrets/answer.toml" \
         -o "${GITHUB_WORK_DIR}/latest/answer.toml.age"
       log_ok "answer.toml separat verschlüsselt auf GitHub"
     fi
@@ -282,9 +282,9 @@ if [ "$TARGET_GITHUB" = "true" ] && [ "${SKIP_GITHUB:-false}" = "false" ]; then
     # README anlegen falls nicht vorhanden
     if [ ! -f "${GITHUB_WORK_DIR}/README.md" ]; then
       cat > "${GITHUB_WORK_DIR}/README.md" << 'EOF'
-# openclaw-proxmox-configs
+# jarvis-os-configs
 
-Automatisch generierte verschlüsselte Konfigurations-Backups für OpenClaw-Proxmox.
+Automatisch generierte verschlüsselte Konfigurations-Backups für J.A.R.V.I.S-OS-Proxmox.
 
 ## Entschlüsseln
 
@@ -296,13 +296,13 @@ tar -xzf config-backup.tar.gz
 
 ## Restore
 
-Siehe [backup-restore-guide.md](https://github.com/WaR10ck-2025/openclaw-proxmox/blob/main/docs/backup-restore-guide.md)
+Siehe [backup-restore-guide.md](https://github.com/WaR10ck-2025/jarvis-os-infra/blob/main/docs/backup-restore-guide.md)
 EOF
     fi
 
     cd "$GITHUB_WORK_DIR"
-    git config user.email "proxmox-backup@openclaw"
-    git config user.name "OpenClaw Backup"
+    git config user.email "proxmox-backup@jarvis"
+    git config user.name "J.A.R.V.I.S-OS Backup"
     git add -A
     git diff --cached --quiet || git commit -m "backup: config ${TIMESTAMP}"
     git push --quiet origin main

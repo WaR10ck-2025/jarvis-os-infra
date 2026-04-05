@@ -14,7 +14,7 @@
 [global]
 keyboard = "de"
 country = "de"
-fqdn = "openclaw.local"
+fqdn = "jarvis.local"
 mailto = "Elias.Boos.000@gmail.com"
 timezone = "Europe/Berlin"
 root_password = "test1234567890"

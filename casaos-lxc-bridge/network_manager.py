@@ -70,7 +70,7 @@ def create_bridge(user_id: int, proxmox) -> str:
         headscale_line = (
             f"            post-up   iptables -I FORWARD 1 -i {bridge} "
             f"-d {HEADSCALE_LXC_IP} -p tcp --dport {HEADSCALE_PORT} -j ACCEPT "
-            f"-m comment --comment openclaw-user-{u}-headscale\n"
+            f"-m comment --comment jarvis-user-{u}-headscale\n"
         )
 
     # Bridge-Store-Ausnahme: CasaOS App-Store (immer aktiv)
@@ -78,7 +78,7 @@ def create_bridge(user_id: int, proxmox) -> str:
     bridge_store_line = (
         f"            post-up   iptables -I FORWARD 1 -i {bridge} "
         f"-d {BRIDGE_HOST_IP} -p tcp --dport {BRIDGE_HOST_PORT} -j ACCEPT "
-        f"-m comment --comment openclaw-user-{u}-bridge-store\n"
+        f"-m comment --comment jarvis-user-{u}-bridge-store\n"
     )
 
     mgmt_ip = get_user_mgmt_ip(u)
@@ -94,23 +94,23 @@ def create_bridge(user_id: int, proxmox) -> str:
             bridge-stp off
             bridge-fd 0
             # Internet: ACCEPT + NAT appenden (am Ende der Chain)
-            post-up   iptables -t nat -A POSTROUTING -s 10.{u}.0.0/24 -o vmbr0 -j MASQUERADE -m comment --comment openclaw-user-{u}
-            post-up   iptables -A FORWARD -i {bridge} -o vmbr0 -j ACCEPT -m comment --comment openclaw-user-{u}
-            post-up   iptables -A FORWARD -i vmbr0 -o {bridge} -m state --state RELATED,ESTABLISHED -j ACCEPT -m comment --comment openclaw-user-{u}
+            post-up   iptables -t nat -A POSTROUTING -s 10.{u}.0.0/24 -o vmbr0 -j MASQUERADE -m comment --comment jarvis-user-{u}
+            post-up   iptables -A FORWARD -i {bridge} -o vmbr0 -j ACCEPT -m comment --comment jarvis-user-{u}
+            post-up   iptables -A FORWARD -i vmbr0 -o {bridge} -m state --state RELATED,ESTABLISHED -j ACCEPT -m comment --comment jarvis-user-{u}
             # Isolation via -I FORWARD 1: an Kettenanfang einfügen, überholt ACCEPT-Regeln
             # Reihenfolge: iso DROP → mgmt DROP → HS-Ausnahme (jede überholt die vorherige)
-            post-up   iptables -I FORWARD 1 -i {bridge} -d 10.0.0.0/8 -j DROP -m comment --comment openclaw-user-{u}-iso
-            post-up   iptables -I FORWARD 1 -i {bridge} -d 192.168.10.0/24 -j DROP -m comment --comment openclaw-user-{u}-mgmt
+            post-up   iptables -I FORWARD 1 -i {bridge} -d 10.0.0.0/8 -j DROP -m comment --comment jarvis-user-{u}-iso
+            post-up   iptables -I FORWARD 1 -i {bridge} -d 192.168.10.0/24 -j DROP -m comment --comment jarvis-user-{u}-mgmt
     """) + headscale_line + bridge_store_line + textwrap.dedent(f"""
             # Lokaler LAN-Zugang: IP-Alias + DNAT → 10.{u}.0.10
             post-up   ip addr add {mgmt_ip}/32 dev vmbr0 2>/dev/null || true
-            post-up   iptables -t nat -A PREROUTING -d {mgmt_ip} -j DNAT --to-destination {casaos_ip} -m comment --comment openclaw-user-{u}-dnat
-            post-up   iptables -t nat -A POSTROUTING -s {casaos_ip} -o vmbr0 -j SNAT --to-source {mgmt_ip} -m comment --comment openclaw-user-{u}-snat
-            post-up   iptables -A FORWARD -i vmbr0 -o {bridge} -d {casaos_ip} -j ACCEPT -m comment --comment openclaw-user-{u}-mgmt-fwd
-            post-up   iptables -I FORWARD 1 -i {bridge} -o vmbr0 -m state --state ESTABLISHED,RELATED -j ACCEPT -m comment --comment openclaw-user-{u}-est
+            post-up   iptables -t nat -A PREROUTING -d {mgmt_ip} -j DNAT --to-destination {casaos_ip} -m comment --comment jarvis-user-{u}-dnat
+            post-up   iptables -t nat -A POSTROUTING -s {casaos_ip} -o vmbr0 -j SNAT --to-source {mgmt_ip} -m comment --comment jarvis-user-{u}-snat
+            post-up   iptables -A FORWARD -i vmbr0 -o {bridge} -d {casaos_ip} -j ACCEPT -m comment --comment jarvis-user-{u}-mgmt-fwd
+            post-up   iptables -I FORWARD 1 -i {bridge} -o vmbr0 -m state --state ESTABLISHED,RELATED -j ACCEPT -m comment --comment jarvis-user-{u}-est
             # Cleanup
             post-down ip addr del {mgmt_ip}/32 dev vmbr0 2>/dev/null || true
-            post-down iptables -t nat -D POSTROUTING -s 10.{u}.0.0/24 -o vmbr0 -j MASQUERADE -m comment --comment openclaw-user-{u} || true
+            post-down iptables -t nat -D POSTROUTING -s 10.{u}.0.0/24 -o vmbr0 -j MASQUERADE -m comment --comment jarvis-user-{u} || true
     """)
 
     proxmox._ssh_run(
@@ -140,7 +140,7 @@ def destroy_bridge(user_id: int, proxmox) -> None:
     )
     # iptables-Regeln mit User-Kommentar entfernen (inkl. NAT + FORWARD)
     proxmox._ssh_run(
-        f"iptables-save | grep -v 'openclaw-user-{user_id}' | iptables-restore 2>/dev/null || true"
+        f"iptables-save | grep -v 'jarvis-user-{user_id}' | iptables-restore 2>/dev/null || true"
     )
     # Management-IP-Alias entfernen
     proxmox._ssh_run(

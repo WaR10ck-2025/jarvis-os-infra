@@ -1,6 +1,6 @@
 #!/bin/bash
 # restore-full.sh — Geführter Full-Restore-Assistent für neue Hardware
-# Interaktiver Schritt-für-Schritt Restore der gesamten OpenClaw-Infrastruktur.
+# Interaktiver Schritt-für-Schritt Restore der gesamten J.A.R.V.I.S-OS-Infrastruktur.
 # Läuft auf dem frisch installierten Proxmox-Host.
 
 set -e
@@ -35,7 +35,7 @@ wait_confirm() {
 
 echo ""
 echo -e "${BOLD}╔══════════════════════════════════════════════════════════════╗${RESET}"
-echo -e "${BOLD}║         OpenClaw Proxmox — Full-Restore-Assistent            ║${RESET}"
+echo -e "${BOLD}║         J.A.R.V.I.S-OS Proxmox — Full-Restore-Assistent            ║${RESET}"
 echo -e "${BOLD}╠══════════════════════════════════════════════════════════════╣${RESET}"
 echo -e "${BOLD}║  Dieser Assistent stellt die gesamte Infrastruktur auf       ║${RESET}"
 echo -e "${BOLD}║  neuer Hardware wieder her.                                   ║${RESET}"
@@ -52,7 +52,7 @@ else
   err "Proxmox VE ist NICHT installiert!"
   echo ""
   info "Proxmox zuerst installieren:"
-  info "  1. proxmox-openclaw.iso auf USB flashen (Balena Etcher)"
+  info "  1. proxmox-jarvis.iso auf USB flashen (Balena Etcher)"
   info "  2. Von USB booten → Autoinstall läuft automatisch durch"
   info "  3. Warten bis System neugestartet ist (~10-20 Min)"
   info "  4. SSH: ssh root@192.168.10.147"
@@ -68,8 +68,8 @@ if [ ! -f "$CONFIG_FILE" ]; then
   warn "config/backup.conf nicht gefunden"
   info "Bitte manuell einrichten:"
   echo ""
-  echo "  git clone https://github.com/WaR10ck-2025/openclaw-proxmox.git /opt/openclaw"
-  echo "  bash /opt/openclaw/scripts/backup/install-backup-deps.sh"
+  echo "  git clone https://github.com/WaR10ck-2025/jarvis-os-infra.git /opt/jarvis-os"
+  echo "  bash /opt/jarvis-os/scripts/backup/install-backup-deps.sh"
   echo ""
   wait_confirm "Repo klonen und install-backup-deps.sh ausführen"
 

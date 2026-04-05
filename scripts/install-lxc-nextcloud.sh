@@ -192,7 +192,7 @@ x-casaos:
     en_US: "Nextcloud"
   port_map: "192.168.10.109:80"
   developer: "Nextcloud GmbH"
-  author: "OpenClaw"
+  author: "J.A.R.V.I.S-OS"
 XCASAOS_EOF
 )
 

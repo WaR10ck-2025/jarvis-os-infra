@@ -1,5 +1,5 @@
 #!/bin/bash
-# install.sh — casaos-lxc-bridge installieren (auf CasaOS-LXC 20)
+# install.sh — jarvis-lxc-bridge installieren (auf CasaOS-LXC 20)
 # Läuft auf dem CasaOS-Host (192.168.10.141)
 
 set -e
@@ -7,7 +7,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$SCRIPT_DIR"
 
-echo "► casaos-lxc-bridge installieren..."
+echo "► jarvis-lxc-bridge installieren..."
 
 # Docker + docker-compose-plugin prüfen
 if ! command -v docker &>/dev/null; then
@@ -29,8 +29,8 @@ if [ ! -f "$PROJECT_ROOT/.env" ]; then
   echo ""
 fi
 
-# openclaw-net erstellen wenn nicht vorhanden
-docker network create openclaw-net 2>/dev/null || true
+# jarvis-net erstellen wenn nicht vorhanden
+docker network create jarvis-net 2>/dev/null || true
 
 # Bridge deployen
 cd "$PROJECT_ROOT"
@@ -38,7 +38,7 @@ docker compose pull 2>/dev/null || true
 docker compose up -d --build
 
 echo ""
-echo "  ✓ casaos-lxc-bridge läuft auf http://192.168.10.141:8200"
+echo "  ✓ jarvis-lxc-bridge läuft auf http://192.168.10.141:8200"
 echo ""
 echo "  Verfügbare Endpunkte:"
 echo "    GET  http://192.168.10.141:8200/health"

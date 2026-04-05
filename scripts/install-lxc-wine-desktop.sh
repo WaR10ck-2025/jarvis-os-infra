@@ -74,7 +74,7 @@ cd $DEPLOY_DIR
 # Proxmox Override: usbip-server + windows-vm deaktiviert
 docker compose \
   -f docker-compose.yml \
-  -f /opt/openclaw-proxmox/docker-compose.proxmox.yml \
+  -f /opt/jarvis-os-infra/docker-compose.proxmox.yml \
   up -d wine-desktop
 SETUP
 pct push "$LXC_ID" /tmp/lxc-${LXC_ID}-setup.sh /tmp/setup.sh

@@ -104,9 +104,9 @@ ZFS_KEY=""
 if [ "$KEY_MODE" = "2" ] && $YK_AVAILABLE; then
   echo ""
   echo "YubiKey HMAC-SHA1 Slot 2 wird für Schlüssel-Ableitung genutzt."
-  echo "Challenge: openclaw-zfs-${POOL_NAME}"
+  echo "Challenge: jarvis-zfs-${POOL_NAME}"
   read -rp "YubiKey berühren zum Fortfahren..." _DUMMY
-  ZFS_KEY=$(echo "openclaw-zfs-${POOL_NAME}" | ykchalresp -2 -H 2>/dev/null | tr -d '\n')
+  ZFS_KEY=$(echo "jarvis-zfs-${POOL_NAME}" | ykchalresp -2 -H 2>/dev/null | tr -d '\n')
   if [ -z "$ZFS_KEY" ]; then
     echo "✗ YubiKey HMAC fehlgeschlagen — verwende Passphrase."
     KEY_MODE=1

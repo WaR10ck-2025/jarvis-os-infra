@@ -11,13 +11,13 @@ CONFIG_FILE="$PROJECT_ROOT/config/backup.conf"
 
 # Config laden
 if [ ! -f "$CONFIG_FILE" ]; then
-  echo "  ✗ $CONFIG_FILE nicht gefunden — ist das Repo unter /opt/openclaw?"
-  echo "    git clone https://github.com/WaR10ck-2025/openclaw-proxmox.git /opt/openclaw"
+  echo "  ✗ $CONFIG_FILE nicht gefunden — ist das Repo unter /opt/jarvis-os?"
+  echo "    git clone https://github.com/WaR10ck-2025/jarvis-os-infra.git /opt/jarvis-os"
   exit 1
 fi
 source "$CONFIG_FILE"
 
-echo "► OpenClaw Backup-System: Abhängigkeiten installieren..."
+echo "► J.A.R.V.I.S-OS Backup-System: Abhängigkeiten installieren..."
 echo ""
 
 # ── 1. Basis-Pakete ──────────────────────────────────────────────────────────
@@ -145,30 +145,30 @@ else
 fi
 
 # ── 11. answer.toml Backup-Hinweis ───────────────────────────────────────────
-if [ ! -f "/root/openclaw-secrets/answer.toml" ]; then
+if [ ! -f "/root/jarvis-secrets/answer.toml" ]; then
   echo ""
   echo "  ⚠  KRITISCH: answer.toml nicht gefunden!"
   echo "     Die Datei enthält Proxmox root-Passwort + LUKS-Passphrase."
   echo "     Falls vorhanden, bitte sichern:"
-  echo "       mkdir -p /root/openclaw-secrets"
-  echo "       cp /path/to/answer.toml /root/openclaw-secrets/"
+  echo "       mkdir -p /root/jarvis-secrets"
+  echo "       cp /path/to/answer.toml /root/jarvis-secrets/"
   echo "     → backup-config.sh wird diese Datei verschlüsselt sichern."
   echo ""
 fi
 
 # ── 12. Cron-Job einrichten ──────────────────────────────────────────────────
 echo "  → Cron-Job einrichten..."
-CRON_FILE="/etc/cron.d/openclaw-backup"
+CRON_FILE="/etc/cron.d/jarvis-os-backup"
 if [ ! -f "$CRON_FILE" ]; then
   cat > "$CRON_FILE" << EOF
-# OpenClaw Proxmox Backup — automatische Backups
+# J.A.R.V.I.S-OS Proxmox Backup — automatische Backups
 # Generiert von install-backup-deps.sh am $(date +%Y-%m-%d)
 
 # Layer 1 (Config) + Layer 3 (App-Daten): täglich um 03:00 Uhr
-0 3 * * * root ${OPENCLAW_DIR}/scripts/backup/backup-all.sh --layer 1,3 >> ${LOG_DIR}/cron.log 2>&1
+0 3 * * * root ${JARVIS_DIR}/scripts/backup/backup-all.sh --layer 1,3 >> ${LOG_DIR}/cron.log 2>&1
 
 # Layer 2 (vzdump): jeden Sonntag um 02:00 Uhr
-0 2 * * 0 root ${OPENCLAW_DIR}/scripts/backup/backup-all.sh --layer 2 >> ${LOG_DIR}/cron.log 2>&1
+0 2 * * 0 root ${JARVIS_DIR}/scripts/backup/backup-all.sh --layer 2 >> ${LOG_DIR}/cron.log 2>&1
 EOF
   chmod 644 "$CRON_FILE"
   echo "  ✓ Cron-Job eingerichtet: $CRON_FILE"
@@ -179,7 +179,7 @@ fi
 # ── Zusammenfassung ──────────────────────────────────────────────────────────
 echo ""
 echo "  ╔══════════════════════════════════════════════════════════════╗"
-echo "  ║            OpenClaw Backup-System: Setup abgeschlossen       ║"
+echo "  ║            J.A.R.V.I.S-OS Backup-System: Setup abgeschlossen       ║"
 echo "  ╠══════════════════════════════════════════════════════════════╣"
 echo "  ║  Nächste Schritte:                                            ║"
 echo "  ║  1. AGE_PUBKEY in config/backup.conf eintragen               ║"

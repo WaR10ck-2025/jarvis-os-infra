@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>OpenClaw Admin</title>
+  <title>J.A.R.V.I.S-OS Admin</title>
   <script src="/static/qrcode.min.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -79,6 +79,20 @@
     .btn-icon { background: transparent; border: none; padding: 5px; cursor: pointer;
                 font-size: 1rem; border-radius: 6px; color: var(--muted); transition: all .15s; }
     .btn-icon:hover { color: var(--text); background: var(--border); }
+
+    /* Dashboard-Type Badge (LXC / VM) */
+    .dtype-badge {
+      display: inline-flex; align-items: center; justify-content: center;
+      font-size: 0.65rem; font-weight: 700; letter-spacing: 0.04em;
+      padding: 2px 7px; border-radius: 4px; margin-right: 6px;
+      vertical-align: middle;
+    }
+    .dtype-lxc {
+      background: #0ea5e922; color: #38bdf8; border: 1px solid #0ea5e933;
+    }
+    .dtype-vm {
+      background: #f9731622; color: #fb923c; border: 1px solid #f9731633;
+    }
 
     /* ── OIDC Login-Overlay ──────────────────────────────────── */
     #oidcOverlay {
@@ -331,7 +345,7 @@
 <header>
   <div class="logo">🌉</div>
   <div>
-    <h1>OpenClaw Admin</h1>
+    <h1>J.A.R.V.I.S-OS Admin</h1>
     <p>Multi-Tenant User-Verwaltung</p>
   </div>
 
@@ -352,7 +366,7 @@
 <div id="oidcOverlay">
   <div class="login-card">
     <div class="login-logo">🔐</div>
-    <h2>OpenClaw Admin</h2>
+    <h2>J.A.R.V.I.S-OS Admin</h2>
     <p>Melde dich an um das Admin-Dashboard zu öffnen.</p>
 
     <a href="/auth/login" class="btn-oidc">
@@ -857,8 +871,12 @@
       const isExpanded = expandedUser === u.user_id;
       const displayIp = u.casaos_mgmt_ip || (u.casaos_url ? u.casaos_url.replace('http://', '') : null);
       const displayUrl = u.local_url || u.casaos_url;
+      const dtBadge = u.dashboard_type === 'ugos'
+        ? '<span class="dtype-badge dtype-vm" title="UGOS Virtual Machine">VM</span>'
+        : '<span class="dtype-badge dtype-lxc" title="CasaOS LXC Container">LXC</span>';
       html += `<tr id="row-${u.user_id}">
         <td>
+          ${dtBadge}
           <span class="user-name">${esc(u.username)}</span>
           <span class="user-id"> #${u.user_id}</span>
         </td>
@@ -963,7 +981,7 @@
         ${ip !== '—' ? `<button class="btn btn-ghost btn-sm" onclick="copy(${JSON.stringify(ip)}, this)">📋</button>
         <a href="${esc(openUrl)}" target="_blank" class="btn btn-ghost btn-sm" style="text-decoration:none" title="Dashboard">↗</a>
         <a href="${esc(openUrl)}/#/app-store" target="_blank" class="btn btn-ghost btn-sm" style="text-decoration:none" title="CasaOS App-Store">🛒</a>
-        <a href="/static/user-store.html?key=${esc(u.api_key)}" target="_blank" class="btn btn-ghost btn-sm" style="text-decoration:none" title="OpenClaw App-Store">🏪</a>` : ''}
+        <a href="/static/user-store.html?key=${esc(u.api_key)}" target="_blank" class="btn btn-ghost btn-sm" style="text-decoration:none" title="J.A.R.V.I.S-OS App-Store">🏪</a>` : ''}
       </div>
       <div class="api-key-row">
         <label>API-Key</label>
@@ -1048,7 +1066,7 @@
                 </a>
                 <a class="link-btn" href="/static/user-store.html?key=${esc(u.api_key)}" target="_blank"
                    style="margin-top:6px">
-                  OpenClaw App-Store →
+                  J.A.R.V.I.S-OS App-Store →
                 </a>
               </div>
               <div style="margin-top:8px;font-size:.72rem;color:var(--muted)">

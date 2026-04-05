@@ -1,5 +1,5 @@
 #!/bin/bash
-# restore-hook.sh — OpenClaw Disaster Recovery Engine
+# restore-hook.sh — J.A.R.V.I.S-OS Disaster Recovery Engine
 #
 # Läuft im Kontext von first-boot.sh wenn Backup-USB erkannt wird (Label: Backup).
 # Stellt alle LXCs, VMs und App-Daten von der USB-Festplatte wieder her.
@@ -16,12 +16,12 @@
 
 set -e
 
-LOG_FILE="/var/log/openclaw-first-boot.log"
+LOG_FILE="/var/log/jarvis-os-first-boot.log"
 USB_LABEL="Backup"
 USB_MOUNT="/mnt/backup-usb"
-BACKUP_BASE="${USB_MOUNT}/openclaw-backups"
-REPO_DIR="/opt/openclaw-proxmox"
-REPO_URL="https://github.com/WaR10ck-2025/openclaw-proxmox.git"
+BACKUP_BASE="${USB_MOUNT}/jarvis-os-backups"
+REPO_DIR="/opt/jarvis-os-infra"
+REPO_URL="https://github.com/WaR10ck-2025/jarvis-os-infra.git"
 
 log()         { echo "[$(date '+%H:%M:%S')] $*"        | tee -a "$LOG_FILE"; }
 log_ok()      { echo "[$(date '+%H:%M:%S')]   ✓ $*"    | tee -a "$LOG_FILE"; }
@@ -166,14 +166,14 @@ fi
 log_section "Phase 4: Proxmox Storage registrieren"
 mkdir -p "${BACKUP_BASE}/dump"
 
-if ! pvesm status 2>/dev/null | grep -q "openclaw-backup-usb"; then
-  pvesm add dir openclaw-backup-usb \
+if ! pvesm status 2>/dev/null | grep -q "jarvis-backup-usb"; then
+  pvesm add dir jarvis-backup-usb \
     --path "$USB_MOUNT" \
     --content backup \
     --shared 0 2>/dev/null
-  log_ok "Storage 'openclaw-backup-usb' registriert"
+  log_ok "Storage 'jarvis-backup-usb' registriert"
 else
-  log_ok "Storage 'openclaw-backup-usb' bereits vorhanden"
+  log_ok "Storage 'jarvis-backup-usb' bereits vorhanden"
 fi
 
 # Ziel-Storage für Restore (wohin die Disk-Images/rootdirs gehen)
@@ -319,7 +319,7 @@ fi
 log ""
 log "  Proxmox Web-UI: https://${PROXMOX_IP}:8006"
 log "  SSH:            ssh root@${PROXMOX_IP}"
-log "  Logs:           journalctl -u openclaw-first-boot -f"
+log "  Logs:           journalctl -u jarvis-os-first-boot -f"
 log "  Backup-Source:  $DUMP_DIR"
 log ""
 log "  Wiederhergestellte Container:"

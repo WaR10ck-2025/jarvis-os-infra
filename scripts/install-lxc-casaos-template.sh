@@ -94,10 +94,10 @@ fi
 # ── Verzeichnisse anlegen ─────────────────────────────────────────────────────
 mkdir -p /DATA/AppData /DATA/Gallery /opt/casaos-bridge
 
-# ── OpenClaw App-Store vorregistrieren ───────────────────────────────────────
+# ── J.A.R.V.I.S-OS App-Store vorregistrieren ───────────────────────────────────────
 # Wichtig: casaos-cli nutzen (NICHT conf-Datei direkt editieren —
 # CasaOS überschreibt die Datei aus seinem internen State bei jedem Neustart)
-echo "── OpenClaw App-Store vorregistrieren ───────────────"
+echo "── J.A.R.V.I.S-OS App-Store vorregistrieren ───────────────"
 BRIDGE_STORE_URL="${BRIDGE_URL:-http://192.168.10.141:8200}/casaos-store.zip"
 
 # CasaOS-Dienste sicherstellen
@@ -110,7 +110,7 @@ for i in $(seq 1 6); do
   casaos-cli app-management register app-store "$BRIDGE_STORE_URL" 2>/dev/null || true
   sleep 5
 done
-echo "  ✓ OpenClaw Store vorregistriert: ${BRIDGE_STORE_URL}"
+echo "  ✓ J.A.R.V.I.S-OS Store vorregistriert: ${BRIDGE_STORE_URL}"
 
 # ── Samba konfigurieren ───────────────────────────────────────────────────────
 echo "── Samba konfigurieren ──────────────────────────"
@@ -121,7 +121,7 @@ useradd -M -s /sbin/nologin casaos 2>/dev/null || true
 # Samba-Konfiguration
 cat > /etc/samba/smb.conf << 'SMBCONF'
 [global]
-   workgroup = OPENCLAW
+   workgroup = JARVIS
    server string = CasaOS User Storage
    security = user
    map to guest = bad user

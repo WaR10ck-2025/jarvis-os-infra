@@ -66,7 +66,7 @@ EOF
 
 docker compose \
   -f docker-compose.yml \
-  -f /opt/openclaw-proxmox/docker-compose.proxmox.yml \
+  -f /opt/jarvis-os-infra/docker-compose.proxmox.yml \
   -f /root/wine-ui-compose-override.yml \
   up -d manager-ui
 SETUP

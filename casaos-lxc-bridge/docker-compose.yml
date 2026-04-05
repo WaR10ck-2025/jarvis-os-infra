@@ -1,5 +1,5 @@
 services:
-  casaos-lxc-bridge:
+  jarvis-lxc-bridge:
     build: .
     restart: unless-stopped
     ports:
@@ -49,7 +49,7 @@ services:
       - USER_APP_SLOT_LIMIT=${USER_APP_SLOT_LIMIT:-10}
       # WebAuthn YubiKey (leer = deaktiviert)
       - WEBAUTHN_RP_ID=${WEBAUTHN_RP_ID:-localhost}
-      - WEBAUTHN_RP_NAME=${WEBAUTHN_RP_NAME:-OpenClaw Admin}
+      - WEBAUTHN_RP_NAME=${WEBAUTHN_RP_NAME:-J.A.R.V.I.S-OS Admin}
       - WEBAUTHN_ENABLED=${WEBAUTHN_ENABLED:-false}
       # Authentik OIDC Admin-Dashboard Login
       - OIDC_CLIENT_ID=${OIDC_CLIENT_ID:-}
@@ -60,18 +60,18 @@ services:
       - /root/.ssh/proxmox_key:/app/proxmox_key:ro
       - ./templates:/app/templates:ro
     networks:
-      - openclaw-net
+      - jarvis-net
 
 volumes:
   bridge-data:
 
 networks:
-  openclaw-net:
+  jarvis-net:
     external: true
 
 x-casaos:
   architectures: [amd64, arm64]
-  main: casaos-lxc-bridge
+  main: jarvis-lxc-bridge
   category: Utilities
   description:
     en_US: "Bridge that deploys CasaOS App Store apps as isolated Proxmox LXC containers"
@@ -81,5 +81,5 @@ x-casaos:
   title:
     en_US: "CasaOS LXC Bridge"
   port_map: "8200"
-  developer: "OpenClaw"
-  author: "OpenClaw"
+  developer: "J.A.R.V.I.S-OS"
+  author: "J.A.R.V.I.S-OS"

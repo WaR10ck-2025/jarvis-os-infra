@@ -1,5 +1,5 @@
 #!/bin/bash
-# build-iso.sh — Custom Proxmox ISO mit OpenClaw Autoinstall erstellen
+# build-iso.sh — Custom Proxmox ISO mit J.A.R.V.I.S-OS Autoinstall erstellen
 #
 # Erstellt ein bootfähiges USB-Image / ISO das:
 #   1. Proxmox VE automatisch installiert (kein manueller Input)
@@ -16,16 +16,16 @@
 #   bash build-iso.sh --output /dev/sdb                 # direkt auf USB schreiben
 #
 # Output:
-#   proxmox-openclaw.iso — fertiges ISO (ca. 1 GB)
+#   proxmox-jarvis.iso — fertiges ISO (ca. 1 GB)
 #
 # USB erstellen (nach build):
-#   dd if=proxmox-openclaw.iso of=/dev/sdX bs=4M status=progress
+#   dd if=proxmox-jarvis.iso of=/dev/sdX bs=4M status=progress
 
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-WORK_DIR="/tmp/proxmox-openclaw-build"
-OUTPUT_ISO="$SCRIPT_DIR/proxmox-openclaw.iso"
+WORK_DIR="/tmp/proxmox-jarvis-build"
+OUTPUT_ISO="$SCRIPT_DIR/proxmox-jarvis.iso"
 PVE_ISO=""
 WRITE_TO_USB=""
 INTERACTIVE=false
@@ -47,11 +47,11 @@ while [[ $# -gt 0 ]]; do
 done
 
 if $INTERACTIVE; then
-  OUTPUT_ISO="$SCRIPT_DIR/proxmox-openclaw-interactive.iso"
+  OUTPUT_ISO="$SCRIPT_DIR/proxmox-jarvis-interactive.iso"
 fi
 
 echo "╔══════════════════════════════════════════════════════════╗"
-echo "║       OpenClaw OS — Custom Proxmox ISO Builder         ║"
+echo "║       J.A.R.V.I.S-OS OS — Custom Proxmox ISO Builder         ║"
 echo "╚══════════════════════════════════════════════════════════╝"
 if $INTERACTIVE; then
   echo "  Modus: INTERAKTIV (Proxmox-Wizard + automatischer first-boot)"
@@ -196,17 +196,17 @@ else
     mkdir -p "$TARGET/etc/proxmox-installer"
 
     echo "  First-boot Scripts injizieren..."
-    install -m 755 "$SCRIPT_DIR/first-boot.sh"      "$TARGET/root/openclaw-first-boot.sh"
-    install -m 644 "$SCRIPT_DIR/first-boot.service" "$TARGET/etc/systemd/system/openclaw-first-boot.service"
-    install -m 755 "$SCRIPT_DIR/restore-hook.sh"    "$TARGET/root/openclaw-restore-hook.sh"
+    install -m 755 "$SCRIPT_DIR/first-boot.sh"      "$TARGET/root/jarvis-os-first-boot.sh"
+    install -m 644 "$SCRIPT_DIR/first-boot.service" "$TARGET/etc/systemd/system/jarvis-os-first-boot.service"
+    install -m 755 "$SCRIPT_DIR/restore-hook.sh"    "$TARGET/root/jarvis-restore-hook.sh"
     install -m 755 "$SCRIPT_DIR/yubikey-enroll.sh"  "$TARGET/root/" 2>/dev/null || true
     install -m 755 "$SCRIPT_DIR/zfs-unlock.sh"      "$TARGET/usr/local/bin/" 2>/dev/null || true
     install -m 644 "$SCRIPT_DIR/zfs-unlock.service" "$TARGET/etc/systemd/system/" 2>/dev/null || true
     install -m 755 "$SCRIPT_DIR/zfs-pool-create.sh" "$TARGET/root/" 2>/dev/null || true
 
     # systemd service enablen (Symlink)
-    ln -sf /etc/systemd/system/openclaw-first-boot.service \
-      "$TARGET/etc/systemd/system/multi-user.target.wants/openclaw-first-boot.service" 2>/dev/null || true
+    ln -sf /etc/systemd/system/jarvis-os-first-boot.service \
+      "$TARGET/etc/systemd/system/multi-user.target.wants/jarvis-os-first-boot.service" 2>/dev/null || true
 
     # squashfs neu packen
     echo "  squashfs neu packen (kann 5–10 Min dauern)..."

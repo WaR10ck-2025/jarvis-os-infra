@@ -58,11 +58,11 @@ command -v docker &>/dev/null || { echo "Docker-Installation fehlgeschlagen"; ex
 
 # Deploy Key einrichten (SSH für privates Repo, idempotent)
 mkdir -p /root/.ssh && chmod 700 /root/.ssh
-echo '$DEPLOY_KEY_B64' | base64 -d > /root/.ssh/openclaw-deploy-key
-chmod 600 /root/.ssh/openclaw-deploy-key
-grep -q 'openclaw-deploy-key' /root/.ssh/config 2>/dev/null || cat >> /root/.ssh/config << 'SSHCONF'
+echo '$DEPLOY_KEY_B64' | base64 -d > /root/.ssh/jarvis-deploy-key
+chmod 600 /root/.ssh/jarvis-deploy-key
+grep -q 'jarvis-deploy-key' /root/.ssh/config 2>/dev/null || cat >> /root/.ssh/config << 'SSHCONF'
 Host github.com
-  IdentityFile /root/.ssh/openclaw-deploy-key
+  IdentityFile /root/.ssh/jarvis-deploy-key
   StrictHostKeyChecking no
 SSHCONF
 

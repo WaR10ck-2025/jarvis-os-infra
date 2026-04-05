@@ -1,7 +1,7 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-    OpenClaw Tools — Proxmox ISO Verwaltung (funktioniert in allen Terminals)
+    J.A.R.V.I.S-OS Tools — Proxmox ISO Verwaltung (funktioniert in allen Terminals)
 
 .PARAMETER Action
     build | copy | build-copy | help
@@ -10,10 +10,10 @@
     Laufwerksbuchstabe fuer build-copy (z.B. D)
 
 .EXAMPLE
-    .\openclaw-tools.ps1 build
-    .\openclaw-tools.ps1 copy
-    .\openclaw-tools.ps1 build-copy D
-    .\openclaw-tools.ps1
+    .\jarvis-tools.ps1 build
+    .\jarvis-tools.ps1 copy
+    .\jarvis-tools.ps1 build-copy D
+    .\jarvis-tools.ps1
 #>
 
 param(
@@ -29,7 +29,7 @@ function Show-Menu {
     Clear-Host
     Write-Host ""
     Write-Host "  ========================================================" -ForegroundColor Cyan
-    Write-Host "         OpenClaw Tools -- Proxmox ISO Verwaltung          " -ForegroundColor Cyan
+    Write-Host "         J.A.R.V.I.S-OS Tools -- Proxmox ISO Verwaltung          " -ForegroundColor Cyan
     Write-Host "  ========================================================" -ForegroundColor Cyan
     Write-Host ""
     Write-Host "    [1]  ISO bauen            (via WSL2)"
@@ -38,7 +38,7 @@ function Show-Menu {
     Write-Host "    [4]  Beenden"
     Write-Host ""
     Write-Host "  --------------------------------------------------------" -ForegroundColor Gray
-    Write-Host "    Terminal:  .\openclaw-tools.ps1 build | copy | build-copy D" -ForegroundColor Gray
+    Write-Host "    Terminal:  .\jarvis-tools.ps1 build | copy | build-copy D" -ForegroundColor Gray
     Write-Host "  ========================================================" -ForegroundColor Cyan
     Write-Host ""
 }
@@ -69,14 +69,14 @@ function Run-BuildCopy {
 
 function Show-Help {
     Write-Host ""
-    Write-Host "  OpenClaw Tools -- Proxmox ISO Verwaltung"
+    Write-Host "  J.A.R.V.I.S-OS Tools -- Proxmox ISO Verwaltung"
     Write-Host ""
     Write-Host "  Verwendung:"
-    Write-Host "    .\openclaw-tools.ps1              Interaktives Menue"
-    Write-Host "    .\openclaw-tools.ps1 build        ISO bauen via WSL2"
-    Write-Host "    .\openclaw-tools.ps1 copy         ISO auf Ventoy-Stick kopieren"
-    Write-Host "    .\openclaw-tools.ps1 build-copy D ISO bauen + direkt auf Stick D"
-    Write-Host "    .\openclaw-tools.ps1 help         Diese Hilfe"
+    Write-Host "    .\jarvis-tools.ps1              Interaktives Menue"
+    Write-Host "    .\jarvis-tools.ps1 build        ISO bauen via WSL2"
+    Write-Host "    .\jarvis-tools.ps1 copy         ISO auf Ventoy-Stick kopieren"
+    Write-Host "    .\jarvis-tools.ps1 build-copy D ISO bauen + direkt auf Stick D"
+    Write-Host "    .\jarvis-tools.ps1 help         Diese Hilfe"
     Write-Host ""
 }
 

@@ -197,7 +197,7 @@ LXC_ENV_DIR="$EXTRACT_DIR/lxc-envs"
 if [ -f "${LXC_ENV_DIR}/lxc120-casaos-bridge.env" ]; then
   if pct status 120 2>/dev/null | grep -q "running"; then
     pct push 120 "${LXC_ENV_DIR}/lxc120-casaos-bridge.env" \
-      "/opt/openclaw-proxmox/casaos-lxc-bridge/.env"
+      "/opt/jarvis-os-infra/jarvis-lxc-bridge/.env"
     log_ok "LXC 120: casaos-bridge .env zurückgespielt"
   fi
 fi
@@ -233,10 +233,10 @@ fi
 
 # ── answer.toml ───────────────────────────────────────────────────────────────
 if [ -f "$EXTRACT_DIR/answer.toml" ]; then
-  mkdir -p /root/openclaw-secrets
-  cp "$EXTRACT_DIR/answer.toml" /root/openclaw-secrets/answer.toml
-  chmod 600 /root/openclaw-secrets/answer.toml
-  log_ok "answer.toml wiederhergestellt → /root/openclaw-secrets/answer.toml"
+  mkdir -p /root/jarvis-secrets
+  cp "$EXTRACT_DIR/answer.toml" /root/jarvis-secrets/answer.toml
+  chmod 600 /root/jarvis-secrets/answer.toml
+  log_ok "answer.toml wiederhergestellt → /root/jarvis-secrets/answer.toml"
 fi
 
 # ── Proxmox-Services neu starten ─────────────────────────────────────────────

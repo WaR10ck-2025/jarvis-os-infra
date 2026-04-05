@@ -1,7 +1,7 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-    Baut das OpenClaw Proxmox ISO via WSL2 und verifiziert das Ergebnis.
+    Baut das J.A.R.V.I.S-OS Proxmox ISO via WSL2 und verifiziert das Ergebnis.
 
 .PARAMETER PveIso
     Pfad zur Proxmox VE Basis-ISO. Standard: automatische Suche im Downloads-Ordner.
@@ -33,13 +33,13 @@ function Write-Err  { param($msg) Write-Host "  [!!] $msg" -ForegroundColor Red 
 function Write-Info { param($msg) Write-Host "  [ ] $msg"  -ForegroundColor Cyan }
 function Write-Head { param($msg) Write-Host "`n$msg" -ForegroundColor Yellow }
 
-$ProjectDir = "C:\Daten\Projekte\openclaw-proxmox\autoinstall"
-$WslProjectDir = "/mnt/c/Daten/Projekte/openclaw-proxmox/autoinstall"
-$OutputIso = Join-Path $ProjectDir "proxmox-openclaw.iso"
+$ProjectDir = "C:\Daten\Projekte\jarvis-os-infra\autoinstall"
+$WslProjectDir = "/mnt/c/Daten/Projekte/jarvis-os-infra/autoinstall"
+$OutputIso = Join-Path $ProjectDir "proxmox-jarvis.iso"
 
 Write-Host ""
 Write-Host "========================================================" -ForegroundColor Cyan
-Write-Host "       OpenClaw -- Proxmox ISO Builder                  " -ForegroundColor Cyan
+Write-Host "       J.A.R.V.I.S-OS -- Proxmox ISO Builder                  " -ForegroundColor Cyan
 Write-Host "========================================================" -ForegroundColor Cyan
 
 if ($Interactive) {
@@ -98,7 +98,7 @@ Write-Ok "Basis-ISO: $PveIso -- $pveSize MB"
 if (Test-Path $OutputIso) {
     Write-Head ">> Alte ISO entfernen..."
     Remove-Item $OutputIso -Force
-    Write-Ok "Alte proxmox-openclaw.iso entfernt"
+    Write-Ok "Alte proxmox-jarvis.iso entfernt"
 }
 
 # -- WSL2 Pfad umrechnen -----------------------------------------------------
@@ -150,7 +150,7 @@ Write-Ok "SHA256: $hash"
 if ($CopyToVentoy) {
     Write-Head ">> Auf Ventoy-Stick kopieren -- Laufwerk $CopyToVentoy..."
 
-    $ventoyTarget = "${CopyToVentoy}:\proxmox-openclaw.iso"
+    $ventoyTarget = "${CopyToVentoy}:\proxmox-jarvis.iso"
 
     if (-not (Test-Path "${CopyToVentoy}:\")) {
         Write-Err "Laufwerk $CopyToVentoy nicht gefunden."
@@ -223,14 +223,14 @@ Write-Host "  SHA256:   $hash" -ForegroundColor Green
 Write-Host "  Dauer:    ${elapsed}s" -ForegroundColor Green
 
 if ($CopyToVentoy) {
-    Write-Host "  Ventoy:   ${CopyToVentoy}:\proxmox-openclaw.iso" -ForegroundColor Green
+    Write-Host "  Ventoy:   ${CopyToVentoy}:\proxmox-jarvis.iso" -ForegroundColor Green
     Write-Host ""
     Write-Host "  Stick kann jetzt abgezogen werden." -ForegroundColor Yellow
 }
 
 Write-Host ""
 Write-Host "  Naechste Schritte:" -ForegroundColor Yellow
-Write-Host "    1. USB booten -> Ventoy-Menu -> proxmox-openclaw.iso" -ForegroundColor Gray
+Write-Host "    1. USB booten -> Ventoy-Menu -> proxmox-jarvis.iso" -ForegroundColor Gray
 if ($Interactive) {
     Write-Host "    2. Proxmox Wizard -> Disk, Hostname, Passwort konfigurieren" -ForegroundColor Gray
 } else {

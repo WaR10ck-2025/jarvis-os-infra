@@ -1,5 +1,5 @@
 ---
-project: openclaw-proxmox
+project: jarvis-os-infra
 status: active
 last_updated: 2026-03-22
 concept_version: v1.0
@@ -10,13 +10,13 @@ token_estimate_per_phase: ~80k
 complexity_last_updated: 2026-03-22
 ---
 
-# openclaw-proxmox — Project Concept
+# jarvis-os-infra — Project Concept
 
 ## Purpose & Goal
-Proxmox VE 8.x Homelab-Infrastruktur — vollautomatische Installation via Custom ISO (LUKS2 + YubiKey optional). Jeder Service läuft in einem eigenen LXC-Container. **Basis-Infrastruktur für das gesamte OpenClaw-Ökosystem.**
+Proxmox VE 8.x Homelab-Infrastruktur — vollautomatische Installation via Custom ISO (LUKS2 + YubiKey optional). Jeder Service läuft in einem eigenen LXC-Container. **Basis-Infrastruktur für das gesamte J.A.R.V.I.S-OS-Ökosystem.**
 
 ## Current Status
-Active. Autoinstall-ISO bereits gebaut (`proxmox-openclaw.iso`). Alle LXC-Deploy-Skripte vorhanden. Migration von Umbrel zu Proxmox läuft (MIGRATION.md).
+Active. Autoinstall-ISO bereits gebaut (`proxmox-jarvis.iso`). Alle LXC-Deploy-Skripte vorhanden. Migration von Umbrel zu Proxmox läuft (MIGRATION.md).
 
 ## Komplexität & Token-Schätzung
 | Faktor | Score | Bewertung |
@@ -76,7 +76,7 @@ _(kein externer Kunde — persönliche Homelab-Infrastruktur)_
 - `answer.toml` anpassen (Passwörter!) BEVOR ISO gebaut wird — nicht im Repo committen
 - YubiKey LUKS-Enrollment nachträglich via `yubikey-enroll.sh` — Passphrase bleibt als Fallback
 - `install-all.sh` deployt alle LXCs auf einmal (~10-15 Min) — idempotent
-- Kein Docker / openclaw-net auf dieser Ebene — jeder LXC hat eigenen Netzwerk-Namespace
+- Kein Docker / jarvis-net auf dieser Ebene — jeder LXC hat eigenen Netzwerk-Namespace
 - **CasaOS App-Store-Bridge:** LXC App-Template (ID 9000) muss VOR Schritt 2 existieren — `install-all.sh` erledigt das automatisch via `install-lxc-app-template.sh` (Schritt 1b)
 - **Proxmox API-Token** für Bridge wird automatisch in `install-all.sh` Schritt 2b erstellt und in `.env` von LXC 20 injiziert — kein manueller Eingriff nötig
 - LXC-Range 300–399 reserviert für dynamisch installierte CasaOS App-Store-Apps (IP: 192.168.10.181–249)

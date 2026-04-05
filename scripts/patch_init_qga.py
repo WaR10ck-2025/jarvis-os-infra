@@ -11,16 +11,16 @@ init_path = sys.argv[1] if len(sys.argv) > 1 else "init"
 with open(init_path, "r") as f:
     content = f.read()
 
-# Remove old OpenClaw patches if present
-if "OpenClaw Patch" in content:
+# Remove old J.A.R.V.I.S-OS patches if present
+if "J.A.R.V.I.S-OS Patch" in content:
     lines = content.split("\n")
     new_lines = []
     skip = False
     for line in lines:
-        if "=== OpenClaw Patch" in line and "===" in line and "End" not in line:
+        if "=== J.A.R.V.I.S-OS Patch" in line and "===" in line and "End" not in line:
             skip = True
             continue
-        if "=== End OpenClaw Patch ===" in line:
+        if "=== End J.A.R.V.I.S-OS Patch ===" in line:
             skip = False
             continue
         if not skip:
@@ -61,7 +61,7 @@ if idx is None:
     sys.exit(1)
 
 patch = r"""
-# === OpenClaw Patch v3: qemu-guest-agent + network + serial getty ===
+# === J.A.R.V.I.S-OS Patch v3: qemu-guest-agent + network + serial getty ===
 
 # 1) Enable qemu-guest-agent via systemd
 mkdir -p /root/etc/systemd/system/multi-user.target.wants
@@ -76,7 +76,7 @@ ln -sf /usr/lib/systemd/system/serial-getty@.service \
 # 3) Network + qemu-ga startup via rc.local
 cat > /root/etc/rc.local << 'RCEOF'
 #!/bin/sh
-# OpenClaw: ensure network + qemu-guest-agent on every boot
+# J.A.R.V.I.S-OS: ensure network + qemu-guest-agent on every boot
 
 # Find first en* interface
 IFACE=$(ip -o link show | awk -F': ' '/en[a-z]/{print $2; exit}')
@@ -105,7 +105,7 @@ chmod 755 /root/etc/rc.local
 ln -sf /usr/lib/systemd/system/rc-local.service \
   /root/etc/systemd/system/multi-user.target.wants/rc-local.service 2>/dev/null
 
-# === End OpenClaw Patch ==="""
+# === End J.A.R.V.I.S-OS Patch ==="""
 
 lines.insert(idx + 1, patch)
 content = "\n".join(lines)

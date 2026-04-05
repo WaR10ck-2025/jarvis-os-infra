@@ -25,6 +25,7 @@ resources:
 
   # Phase 3: Stateful Services
   - apps/n8n.yaml
+  - apps/headscale.yaml
 
 commonLabels:
   app.kubernetes.io/managed-by: kustomize

@@ -58,24 +58,24 @@ SETUP
 pct push "$LXC_ID" /tmp/lxc-${LXC_ID}-setup.sh /tmp/setup.sh
 pct exec "$LXC_ID" -- bash /tmp/setup.sh
 
-# casaos-lxc-bridge installieren
-BRIDGE_SRC="/root/openclaw-proxmox/casaos-lxc-bridge"
+# jarvis-lxc-bridge installieren
+BRIDGE_SRC="/root/jarvis-os-infra/jarvis-lxc-bridge"
 if [ -d "$BRIDGE_SRC" ]; then
   cat > /tmp/lxc-${LXC_ID}-bridge-setup.sh << 'SETUP'
 #!/bin/bash
 set -e
 export DEBIAN_FRONTEND=noninteractive
 apt-get install -y -qq git
-git clone https://github.com/WaR10ck-2025/openclaw-proxmox.git /opt/openclaw-proxmox 2>/dev/null || \
-  (cd /opt/openclaw-proxmox && git pull)
-bash /opt/openclaw-proxmox/casaos-lxc-bridge/install.sh
+git clone https://github.com/WaR10ck-2025/jarvis-os-infra.git /opt/jarvis-os-infra 2>/dev/null || \
+  (cd /opt/jarvis-os-infra && git pull)
+bash /opt/jarvis-os-infra/jarvis-lxc-bridge/install.sh
 SETUP
   pct push "$LXC_ID" /tmp/lxc-${LXC_ID}-bridge-setup.sh /tmp/bridge-setup.sh
   pct exec "$LXC_ID" -- bash /tmp/bridge-setup.sh
-  echo "  ✓ casaos-lxc-bridge installiert (http://${LXC_IP}:8200)"
+  echo "  ✓ jarvis-lxc-bridge installiert (http://${LXC_IP}:8200)"
 else
-  echo "  ⚠  casaos-lxc-bridge Quellcode nicht gefunden — manuell installieren:"
-  echo "     pct exec $LXC_ID -- bash /opt/openclaw-proxmox/casaos-lxc-bridge/install.sh"
+  echo "  ⚠  jarvis-lxc-bridge Quellcode nicht gefunden — manuell installieren:"
+  echo "     pct exec $LXC_ID -- bash /opt/jarvis-os-infra/jarvis-lxc-bridge/install.sh"
 fi
 
 echo "  ✓ LXC $LXC_ID ($HOSTNAME): http://${LXC_IP}"
@@ -83,14 +83,14 @@ echo ""
 echo "  Nächste Schritte:"
 echo ""
 echo "  1. LXC-App-Template erstellen (einmalig auf Proxmox-Host):"
-echo "     bash /root/openclaw-proxmox/scripts/install-lxc-app-template.sh"
+echo "     bash /root/jarvis-os-infra/scripts/install-lxc-app-template.sh"
 echo ""
-echo "  2. Proxmox API-Token für casaos-lxc-bridge erstellen:"
+echo "  2. Proxmox API-Token für jarvis-lxc-bridge erstellen:"
 echo "     pveum user add casaos@pve 2>/dev/null || true"
 echo "     pveum acl modify / --users casaos@pve --roles PVEVMAdmin"
 echo "     pveum user token add casaos@pve casaos-bridge-token --privsep=0"
 echo "     # Token-UUID in CasaOS-LXC eintragen:"
-echo "     pct exec $LXC_ID -- nano /opt/openclaw-proxmox/casaos-lxc-bridge/.env"
+echo "     pct exec $LXC_ID -- nano /opt/jarvis-os-infra/jarvis-lxc-bridge/.env"
 echo ""
 echo "  3. Bridge-Endpunkte testen:"
 echo "     curl http://${LXC_IP}:8200/health"

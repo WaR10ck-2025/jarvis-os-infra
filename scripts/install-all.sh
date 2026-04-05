@@ -2,12 +2,12 @@
 # install-all.sh — Master-Skript: alle LXCs + VM anlegen
 #
 # Muss auf dem Proxmox-Host als root ausgeführt werden:
-#   bash /opt/openclaw-proxmox/scripts/install-all.sh
+#   bash /opt/jarvis-os-infra/scripts/install-all.sh
 #
 # Ablauf:
 #   1. Debian 12 Template prüfen (herunterladen falls fehlt)
 #   2. Infrastruktur-LXCs anlegen (Reverse-Proxy, CasaOS)
-#   3. OpenClaw Service-LXCs anlegen
+#   3. J.A.R.V.I.S-OS Service-LXCs anlegen
 #   4. Wine Manager LXCs anlegen
 #   5. usbipd LXC anlegen
 #   6. Status-Übersicht ausgeben
@@ -41,7 +41,7 @@ echo "► Schritt 0: SSH-Key für Proxmox-Host prüfen..."
 SSH_KEY="$HOME/.ssh/proxmox_key"
 if [ ! -f "$SSH_KEY" ]; then
   mkdir -p "$HOME/.ssh"
-  ssh-keygen -t ed25519 -f "$SSH_KEY" -N "" -C "openclaw-proxmox-deploy" -q
+  ssh-keygen -t ed25519 -f "$SSH_KEY" -N "" -C "jarvis-os-infra-deploy" -q
   echo "  ✓ SSH-Key erstellt: $SSH_KEY"
 fi
 # Public Key idempotent in authorized_keys eintragen
@@ -81,9 +81,9 @@ echo "► Schritt 2: Infrastruktur-LXCs..."
 bash "$SCRIPT_DIR/install-lxc-reverse-proxy.sh" || echo "  ⚠  Reverse-Proxy: Fehler (ggf. bereits installiert)"
 bash "$SCRIPT_DIR/install-lxc-casaos.sh" || echo "  ⚠  CasaOS: Fehler (ggf. bereits installiert)"
 
-# ── Schritt 2b: Proxmox API-Token für casaos-lxc-bridge ───────────────────
+# ── Schritt 2b: Proxmox API-Token für jarvis-lxc-bridge ───────────────────
 echo ""
-echo "► Schritt 2b: Proxmox API-Token für casaos-lxc-bridge..."
+echo "► Schritt 2b: Proxmox API-Token für jarvis-lxc-bridge..."
 pveum user add casaos@pve 2>/dev/null || true
 pveum acl modify / --users casaos@pve --roles PVEVMAdmin 2>/dev/null || true
 if ! pveum user token list casaos@pve 2>/dev/null | grep -q "casaos-bridge-token"; then
@@ -92,10 +92,10 @@ if ! pveum user token list casaos@pve 2>/dev/null | grep -q "casaos-bridge-token
   echo "  ✓ Token erstellt: PVEAPIToken=casaos@pve!casaos-bridge-token=$TOKEN_UUID"
   # Token automatisch in Bridge-.env auf LXC 20 eintragen + Bridge neu starten
   pct exec 20 -- bash -c "
-    ENV_FILE=/opt/openclaw-proxmox/casaos-lxc-bridge/.env
+    ENV_FILE=/opt/jarvis-os-infra/jarvis-lxc-bridge/.env
     if [ -f \"\$ENV_FILE\" ]; then
       sed -i \"s|PROXMOX_TOKEN=.*|PROXMOX_TOKEN=PVEAPIToken=casaos@pve!casaos-bridge-token=${TOKEN_UUID}|\" \"\$ENV_FILE\"
-      docker compose -f /opt/openclaw-proxmox/casaos-lxc-bridge/docker-compose.yml restart 2>/dev/null || true
+      docker compose -f /opt/jarvis-os-infra/jarvis-lxc-bridge/docker-compose.yml restart 2>/dev/null || true
       echo '  ✓ Token in Bridge-.env eingetragen + Bridge neu gestartet'
     else
       echo '  ⚠  Bridge-.env nicht gefunden — Token manuell eintragen'
@@ -105,9 +105,9 @@ else
   echo "  ✓ Token bereits vorhanden"
 fi
 
-# ── Schritt 3: OpenClaw Services ──────────────────────────────────────────
+# ── Schritt 3: J.A.R.V.I.S-OS Services ──────────────────────────────────────────
 echo ""
-echo "► Schritt 3: OpenClaw Service-LXCs..."
+echo "► Schritt 3: J.A.R.V.I.S-OS Service-LXCs..."
 bash "$SCRIPT_DIR/install-lxc-setup-repair.sh"  || echo "  ⚠  setup-repair: Fehler"
 bash "$SCRIPT_DIR/install-lxc-pionex.sh"         || echo "  ⚠  pionex: Fehler"
 bash "$SCRIPT_DIR/install-lxc-voice.sh"          || echo "  ⚠  voice: Fehler"
@@ -154,7 +154,7 @@ declare -A LXC_MAP=(
   [201]="wine-api:192.168.10.201"
   [202]="wine-ui:192.168.10.202"
   [210]="usbipd:192.168.10.210"
-  [300]="casaos-lxc-bridge:192.168.10.180"
+  [300]="jarvis-lxc-bridge:192.168.10.180"
 )
 
 for ID in 10 20 101 102 103 104 105 106 107 108 109 200 201 202 210 300; do

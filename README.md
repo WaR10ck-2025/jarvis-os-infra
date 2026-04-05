@@ -1,4 +1,4 @@
-# OpenClaw Proxmox
+# J.A.R.V.I.S-OS Proxmox
 
 > **Proxmox VE Homelab Setup** — Ein LXC-Container pro Service, maximale Isolation.
 > Inklusive Custom Installer ISO, LUKS2 Disk-Verschlüsselung und optionalem YubiKey-Support.
@@ -43,7 +43,7 @@ nano autoinstall/answer.toml
 sudo bash autoinstall/build-iso.sh --pve-iso proxmox-ve_8.x.iso
 
 # 3. USB erstellen:
-dd if=proxmox-openclaw.iso of=/dev/sdX bs=4M status=progress
+dd if=proxmox-jarvis.iso of=/dev/sdX bs=4M status=progress
 
 # 4. Booten → ~8 Min → fertig
 ```
@@ -55,7 +55,7 @@ dd if=proxmox-openclaw.iso of=/dev/sdX bs=4M status=progress
 ## Struktur
 
 ```
-openclaw-proxmox/
+jarvis-os-infra/
 ├── README.md                     # Diese Datei
 ├── MIGRATION.md                  # Umbrel → Proxmox Schritt-für-Schritt
 ├── docker-compose.proxmox.yml    # Docker-Compose Override für Proxmox
@@ -100,8 +100,8 @@ Proxmox VE manuell installieren, dann LXCs per Skript anlegen:
 
 ```bash
 # SSH auf Proxmox-Host als root
-git clone https://github.com/WaR10ck-2025/openclaw-proxmox.git /opt/openclaw-proxmox
-cd /opt/openclaw-proxmox
+git clone https://github.com/WaR10ck-2025/jarvis-os-infra.git /opt/jarvis-os-infra
+cd /opt/jarvis-os-infra
 
 # Alle LXCs (dauert ~10-15 Min):
 bash scripts/install-all.sh
@@ -130,10 +130,10 @@ Bestehende Services von Umbrel zu Proxmox migrieren.
 
 ```bash
 # YubiKey nachträglich enrollen:
-bash /opt/openclaw-proxmox/autoinstall/yubikey-enroll.sh
+bash /opt/jarvis-os-infra/autoinstall/yubikey-enroll.sh
 
 # Verschlüsselten ZFS Datenpool anlegen:
-bash /opt/openclaw-proxmox/autoinstall/zfs-pool-create.sh
+bash /opt/jarvis-os-infra/autoinstall/zfs-pool-create.sh
 ```
 
 ---
@@ -144,7 +144,7 @@ bash /opt/openclaw-proxmox/autoinstall/zfs-pool-create.sh
 |---|---|---|---|
 | LXC 10 | Nginx Proxy Manager | 256 MB | 4 GB |
 | LXC 20 | CasaOS Dashboard | 512 MB | 8 GB |
-| LXC 101–108 | OpenClaw Services | 256–1024 MB | 4–16 GB |
+| LXC 101–108 | J.A.R.V.I.S-OS Services | 256–1024 MB | 4–16 GB |
 | LXC 200 | Wine Desktop | 2048 MB | 16 GB |
 | LXC 201–202 | Wine API/UI | 512/256 MB | 8/4 GB |
 | LXC 210 | usbipd nativ | 128 MB | 2 GB |

@@ -3,7 +3,7 @@
 .SYNOPSIS
     Sichert mkcert CA + Site-Zertifikate ins USB-Backup (keys/mkcert/).
 .DESCRIPTION
-    Kopiert rootCA + admin.openclaw.local Zertifikate aus den Quellverzeichnissen
+    Kopiert rootCA + admin.jarvis.local Zertifikate aus den Quellverzeichnissen
     ins lokale USB-Mirror-Verzeichnis. Von dort werden sie per FreeFileSync
     auf den USB-Stick (Secure Zone) synchronisiert.
 #>
@@ -11,7 +11,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
 $ProjectRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
-$BackupKeysDir = Join-Path $ProjectRoot "USB-F35-Pro\backup\openclaw-backups\keys\mkcert"
+$BackupKeysDir = Join-Path $ProjectRoot "USB-F35-Pro\backup\jarvis-os-backups\keys\mkcert"
 $MkcertCA = Join-Path $env:LOCALAPPDATA "mkcert"
 
 # Zielverzeichnis erstellen
@@ -33,8 +33,8 @@ foreach ($file in @("rootCA.pem", "rootCA-key.pem")) {
     }
 }
 
-# Site-Zertifikate (admin.openclaw.local)
-foreach ($file in @("admin.openclaw.local.pem", "admin.openclaw.local-key.pem")) {
+# Site-Zertifikate (admin.jarvis.local)
+foreach ($file in @("admin.jarvis.local.pem", "admin.jarvis.local-key.pem")) {
     $src = Join-Path $ProjectRoot $file
     if (Test-Path $src) {
         Copy-Item $src -Destination $BackupKeysDir -Force

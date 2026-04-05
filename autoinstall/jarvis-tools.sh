@@ -1,5 +1,5 @@
 #!/bin/bash
-# OpenClaw Tools — Terminal-Wrapper (Git Bash / WSL / Linux)
+# J.A.R.V.I.S-OS Tools — Terminal-Wrapper (Git Bash / WSL / Linux)
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 run_build() {
@@ -11,19 +11,19 @@ run_copy() {
 }
 
 run_build_copy() {
-  local drive="${1:?Fehler: Laufwerksbuchstabe fehlt. Beispiel: openclaw-tools.sh build-copy D}"
+  local drive="${1:?Fehler: Laufwerksbuchstabe fehlt. Beispiel: jarvis-tools.sh build-copy D}"
   powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$SCRIPT_DIR/build-iso.ps1" -CopyToVentoy "$drive"
 }
 
 show_help() {
   echo ""
-  echo "  OpenClaw Tools -- Proxmox ISO Verwaltung"
+  echo "  J.A.R.V.I.S-OS Tools -- Proxmox ISO Verwaltung"
   echo ""
   echo "  Verwendung:"
-  echo "    ./openclaw-tools.sh build          ISO bauen via WSL2"
-  echo "    ./openclaw-tools.sh copy           ISO auf Ventoy-Stick kopieren"
-  echo "    ./openclaw-tools.sh build-copy D   ISO bauen + direkt auf Stick D"
-  echo "    ./openclaw-tools.sh help           Diese Hilfe"
+  echo "    ./jarvis-tools.sh build          ISO bauen via WSL2"
+  echo "    ./jarvis-tools.sh copy           ISO auf Ventoy-Stick kopieren"
+  echo "    ./jarvis-tools.sh build-copy D   ISO bauen + direkt auf Stick D"
+  echo "    ./jarvis-tools.sh help           Diese Hilfe"
   echo ""
 }
 

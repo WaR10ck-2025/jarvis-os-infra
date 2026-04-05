@@ -29,7 +29,7 @@ notify() {
     local prio="default"; local tags="package"
     [ "$status" = "error" ] && prio="urgent" && tags="warning"
     curl -s -X POST "$NTFY_URL" \
-      -H "Title: OpenClaw Backup L2 ${status^^}" \
+      -H "Title: J.A.R.V.I.S-OS Backup L2 ${status^^}" \
       -H "Priority: $prio" -H "Tags: $tags" \
       -d "$msg" -o /dev/null 2>/dev/null || true
   fi

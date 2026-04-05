@@ -1,5 +1,5 @@
 """
-main.py — casaos-lxc-bridge FastAPI
+main.py — jarvis-lxc-bridge FastAPI
 
 Endpunkte:
   GET    /                                   → Redirect zur Web-UI
@@ -50,12 +50,12 @@ import preconfigured_apps
 import user_manager
 from auth import require_admin, require_user_or_admin
 
-logger = logging.getLogger("casaos-lxc-bridge")
+logger = logging.getLogger("jarvis-lxc-bridge")
 logging.basicConfig(level=logging.INFO)
 
 BRIDGE_URL = os.getenv("BRIDGE_URL", "http://192.168.10.141:8200")
 BRIDGE_LXC_ID = int(os.getenv("BRIDGE_LXC_ID", "120"))
-STORE_AUTHOR = os.getenv("STORE_AUTHOR", "OpenClaw")
+STORE_AUTHOR = os.getenv("STORE_AUTHOR", "J.A.R.V.I.S-OS")
 
 # ---------------------------------------------------------------------------
 # Katalog-Cache: wird beim Start befüllt + alle 6h refreshed
@@ -206,7 +206,7 @@ async def lifespan(fastapi_app: FastAPI):
 # ---------------------------------------------------------------------------
 
 app = FastAPI(
-    title="casaos-lxc-bridge",
+    title="jarvis-lxc-bridge",
     description="CasaOS App-Store + Umbrel → Proxmox LXC Bridge",
     version="2.0.0",
     lifespan=lifespan,
@@ -229,7 +229,7 @@ def admin_ui():
 def health():
     return {
         "status": "ok",
-        "service": "casaos-lxc-bridge",
+        "service": "jarvis-lxc-bridge",
         "catalog_cached": len(_catalog_cache["apps"]),
         "cache_age_s": int(time.time() - _catalog_cache["last_update"]) if _catalog_cache["last_update"] else None,
     }
@@ -996,7 +996,7 @@ async def admin_trigger_backup(
             cmd = [
                 "ssh", "-i", tmp_key, "-o", "StrictHostKeyChecking=no",
                 f"root@{host_ip}",
-                f"stdbuf -oL bash /opt/openclaw-proxmox/scripts/backup/backup-all.sh --layer {layer} 2>&1"
+                f"stdbuf -oL bash /opt/jarvis-os-infra/scripts/backup/backup-all.sh --layer {layer} 2>&1"
             ]
 
             proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
@@ -1162,8 +1162,8 @@ async def admin_backup_usb_contents(_: None = Depends(require_admin)):
     proxmox = ProxmoxClient()
 
     scan_script = (
-        'source /opt/openclaw/config/backup.conf 2>/dev/null; '
-        'BASE="${BACKUP_BASE_DIR_USB:-/mnt/backup-usb/openclaw-backups}"; '
+        'source /opt/jarvis-os/config/backup.conf 2>/dev/null; '
+        'BASE="${BACKUP_BASE_DIR_USB:-/mnt/backup-usb/jarvis-os-backups}"; '
         'echo "RETENTION_CONFIG:${RETENTION_CONFIG_DAYS:-30}"; '
         'echo "RETENTION_VZDUMP:${RETENTION_VZDUMP_COUNT:-3}"; '
         'echo "RETENTION_APPDATA:${RETENTION_APPDATA_DAYS:-14}"; '
@@ -1261,8 +1261,8 @@ async def admin_backup_usb_cleanup(
     proxmox = ProxmoxClient()
 
     cleanup_script = r'''
-source /opt/openclaw/config/backup.conf 2>/dev/null
-BASE="${BACKUP_BASE_DIR_USB:-/mnt/backup-usb/openclaw-backups}"
+source /opt/jarvis-os/config/backup.conf 2>/dev/null
+BASE="${BACKUP_BASE_DIR_USB:-/mnt/backup-usb/jarvis-os-backups}"
 
 # Vorher-Größe
 BEFORE=$(du -sb "$BASE" 2>/dev/null | cut -f1)
@@ -1410,7 +1410,7 @@ import urllib.error as _urlerr
 
 OIDC_CLIENT_ID     = os.getenv("OIDC_CLIENT_ID", "")
 OIDC_CLIENT_SECRET = os.getenv("OIDC_CLIENT_SECRET", "")
-OIDC_ISSUER        = os.getenv("OIDC_ISSUER", "")   # z.B. http://192.168.10.125:9000/application/o/openclaw-admin/
+OIDC_ISSUER        = os.getenv("OIDC_ISSUER", "")   # z.B. http://192.168.10.125:9000/application/o/jarvis-admin/
 
 # Authentik-Base aus Issuer ableiten (alles vor /application/o/)
 _authentik_base = OIDC_ISSUER.split("/application/o/")[0] if "/application/o/" in OIDC_ISSUER else ""
@@ -1499,7 +1499,7 @@ async def auth_callback(request: Request, code: str = Query(...), state: str = Q
 
     username = userinfo.get("preferred_username") or userinfo.get("sub", "unknown")
 
-    # Admin-Status prüfen: akadmin ODER in openclaw-admins Gruppe
+    # Admin-Status prüfen: akadmin ODER in jarvis-admins Gruppe
     is_admin = False
     try:
         import authentik_client as _ak
@@ -1510,7 +1510,7 @@ async def auth_callback(request: Request, code: str = Query(...), state: str = Q
                 user_pk = users_list[0]["pk"]
                 groups  = _ak._request("GET", f"/core/users/{user_pk}/")
                 user_groups = [g.get("name", "") for g in groups.get("groups_obj", [])]
-                is_admin = username == "akadmin" or "openclaw-admins" in user_groups
+                is_admin = username == "akadmin" or "jarvis-admins" in user_groups
     except Exception:
         # Fallback: nur akadmin darf rein
         is_admin = (username == "akadmin")
@@ -1560,7 +1560,7 @@ async def auth_logout(request: Request):
 # ---------------------------------------------------------------------------
 WEBAUTHN_ENABLED = os.getenv("WEBAUTHN_ENABLED", "false").lower() == "true"
 WEBAUTHN_RP_ID   = os.getenv("WEBAUTHN_RP_ID", "localhost")
-WEBAUTHN_RP_NAME = os.getenv("WEBAUTHN_RP_NAME", "OpenClaw Admin")
+WEBAUTHN_RP_NAME = os.getenv("WEBAUTHN_RP_NAME", "J.A.R.V.I.S-OS Admin")
 
 # In-Memory Challenge-Store (kurzlebig, 5 Minuten)
 _wn_challenges: dict[str, tuple[bytes, float]] = {}   # handle → (challenge, expires)
@@ -1664,7 +1664,7 @@ async def webauthn_register_begin(_: None = Depends(require_admin)):
         user = PublicKeyCredentialUserEntity(
             id=b"admin",
             name="admin",
-            display_name="OpenClaw Admin",
+            display_name="J.A.R.V.I.S-OS Admin",
         )
         options, state = server.register_begin(
             user,

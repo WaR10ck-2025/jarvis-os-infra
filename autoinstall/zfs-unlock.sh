@@ -40,7 +40,7 @@ while IFS= read -r POOL; do
     # YubiKey eingesteckt?
     if ykinfo -q 2>/dev/null | grep -q "serial"; then
       echo "  YubiKey erkannt — verwende HMAC-SHA1..."
-      CHALLENGE="openclaw-zfs-${POOL}"
+      CHALLENGE="jarvis-zfs-${POOL}"
       ZFS_KEY=$(echo "$CHALLENGE" | ykchalresp -2 -H 2>/dev/null | tr -d '\n')
       if [ -n "$ZFS_KEY" ]; then
         if echo "$ZFS_KEY" | zfs load-key "$POOL" 2>/dev/null; then

@@ -1,6 +1,6 @@
 # Migration: Umbrel → Proxmox
 
-Schrittweise Anleitung für die Migration aller OpenClaw Services von Umbrel (Docker) zu Proxmox (LXC).
+Schrittweise Anleitung für die Migration aller J.A.R.V.I.S-OS Services von Umbrel (Docker) zu Proxmox (LXC).
 
 ---
 
@@ -63,7 +63,7 @@ scp -r umbrel@192.168.10.147:/tmp/uploads-backup ./
 
 ```bash
 # Auf Proxmox-Host:
-cd /opt/openclaw-proxmox
+cd /opt/jarvis-os-infra
 bash scripts/install-all.sh
 
 # Dauert ca. 10-15 Minuten

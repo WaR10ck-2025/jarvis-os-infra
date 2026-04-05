@@ -18,14 +18,14 @@
 
 set -euo pipefail
 
-LOG_FILE="${LOG_FILE:-/var/log/openclaw-first-boot.log}"
+LOG_FILE="${LOG_FILE:-/var/log/jarvis-os-first-boot.log}"
 
 # Logging (kompatibel mit restore-hook.sh)
 log() { echo "[$(date '+%H:%M:%S')] $*" | tee -a "$LOG_FILE"; }
 log_section() { log ""; log "══════════════════════════════════════════════"; log "  $*"; log "══════════════════════════════════════════════"; }
 
 # Remote-Logging via ntfy.sh (falls konfiguriert)
-NTFY_TOPIC="${NTFY_TOPIC:-openclaw-first-boot-$(cat /etc/machine-id 2>/dev/null | head -c 8 || echo 'default')}"
+NTFY_TOPIC="${NTFY_TOPIC:-jarvis-os-first-boot-$(cat /etc/machine-id 2>/dev/null | head -c 8 || echo 'default')}"
 NTFY_URL="https://ntfy.sh/${NTFY_TOPIC}"
 log_remote() {
   local msg="$*"
@@ -112,7 +112,7 @@ if ! pveum user list 2>/dev/null | grep -q "casaos@pve"; then
 else
   log "  API-User casaos@pve existiert bereits"
   # Token-Wert aus bestehender .env lesen
-  PROXMOX_TOKEN=$(pct exec 120 -- grep "^PROXMOX_TOKEN=" /opt/openclaw-proxmox/casaos-lxc-bridge/.env 2>/dev/null | cut -d= -f2- || echo "")
+  PROXMOX_TOKEN=$(pct exec 120 -- grep "^PROXMOX_TOKEN=" /opt/jarvis-os-infra/jarvis-lxc-bridge/.env 2>/dev/null | cut -d= -f2- || echo "")
   if [ -n "$PROXMOX_TOKEN" ]; then
     log "  ✓ Token aus .env uebernommen"
   else
@@ -124,7 +124,7 @@ fi
 # ── Schritt 3: Bridge .env aktualisieren (LXC 120) ──────────────────────────
 log_section "Schritt 3: Bridge .env aktualisieren"
 
-ENV_FILE="/opt/openclaw-proxmox/casaos-lxc-bridge/.env"
+ENV_FILE="/opt/jarvis-os-infra/jarvis-lxc-bridge/.env"
 
 # Pruefen ob LXC 120 laeuft und .env existiert
 if ! pct status 120 2>/dev/null | grep -q "running"; then
@@ -143,7 +143,7 @@ else
       -e "s|^PROXMOX_NODE=.*|PROXMOX_NODE=${NODE_NAME}|" \
       -e "s|^PROXMOX_STORAGE=.*|PROXMOX_STORAGE=${STORAGE}|" \
       -e "s|^AUTHENTIK_URL=.*|AUTHENTIK_URL=http://${LXC_125_IP}:9000|" \
-      -e "s|^OIDC_ISSUER=.*|OIDC_ISSUER=http://${LXC_125_IP}:9000/application/o/openclaw-admin/|" \
+      -e "s|^OIDC_ISSUER=.*|OIDC_ISSUER=http://${LXC_125_IP}:9000/application/o/jarvis-admin/|" \
       -e "s|^HEADSCALE_URL=.*|HEADSCALE_URL=http://${LXC_115_IP}:8080|" \
       -e "s|^HEADSCALE_LXC_IP=.*|HEADSCALE_LXC_IP=${LXC_115_IP}|" \
       -e "s|^PORTAINER_URL=.*|PORTAINER_URL=http://${LXC_130_IP}:9000|" \
@@ -210,17 +210,17 @@ else
     pct exec 125 -- docker exec authentik-redis-1 redis-cli FLUSHALL \
       2>&1 | tee -a "$LOG_FILE" || true
 
-    # 4c: Application openclaw-admin erstellen (falls nicht vorhanden)
+    # 4c: Application jarvis-admin erstellen (falls nicht vorhanden)
     AUTHENTIK_TOKEN=$(pct exec 120 -- grep "^AUTHENTIK_TOKEN=" "$ENV_FILE" 2>/dev/null | cut -d= -f2- || echo "")
     if [ -n "$AUTHENTIK_TOKEN" ]; then
-      log "  Pruefe Application openclaw-admin..."
+      log "  Pruefe Application jarvis-admin..."
 
       # Warten nach Redis-Flush (Authentik braucht kurz)
       sleep 3
 
       APP_CHECK=$(curl -sk \
         -H "Authorization: Bearer ${AUTHENTIK_TOKEN}" \
-        "http://${LXC_125_IP}:9000/api/v3/core/applications/?search=openclaw-admin" 2>/dev/null || echo "")
+        "http://${LXC_125_IP}:9000/api/v3/core/applications/?search=jarvis-admin" 2>/dev/null || echo "")
       APP_COUNT=$(echo "$APP_CHECK" | grep -oP '"count":\K[0-9]+' || echo "0")
 
       if [ "$APP_COUNT" = "0" ]; then
@@ -229,12 +229,12 @@ else
         # Provider-ID ermitteln
         PROVIDER_ID=$(curl -sk \
           -H "Authorization: Bearer ${AUTHENTIK_TOKEN}" \
-          "http://${LXC_125_IP}:9000/api/v3/providers/oauth2/?search=OpenClaw" 2>/dev/null \
+          "http://${LXC_125_IP}:9000/api/v3/providers/oauth2/?search=J.A.R.V.I.S-OS" 2>/dev/null \
           | grep -oP '"pk":\K[0-9]+' | head -1 || echo "")
 
         if [ -n "$PROVIDER_ID" ]; then
           cat > /tmp/create-app.json << APPJSON
-{"name":"OpenClaw Admin","slug":"openclaw-admin","provider":${PROVIDER_ID},"meta_launch_url":"http://${LXC_120_IP}:8200","policy_engine_mode":"any"}
+{"name":"J.A.R.V.I.S-OS Admin","slug":"jarvis-admin","provider":${PROVIDER_ID},"meta_launch_url":"http://${LXC_120_IP}:8200","policy_engine_mode":"any"}
 APPJSON
           RESULT=$(curl -sk -X POST \
             -H "Authorization: Bearer ${AUTHENTIK_TOKEN}" \
@@ -243,8 +243,8 @@ APPJSON
             "http://${LXC_125_IP}:9000/api/v3/core/applications/" 2>&1)
           rm -f /tmp/create-app.json
 
-          if echo "$RESULT" | grep -q "openclaw-admin"; then
-            log "  ✓ Application openclaw-admin erstellt"
+          if echo "$RESULT" | grep -q "jarvis-admin"; then
+            log "  ✓ Application jarvis-admin erstellt"
           else
             log "  ⚠ Application-Erstellung unklar: $(echo "$RESULT" | head -c 200)"
           fi
@@ -253,7 +253,7 @@ APPJSON
           ERRORS=$((ERRORS + 1))
         fi
       else
-        log "  ✓ Application openclaw-admin existiert bereits"
+        log "  ✓ Application jarvis-admin existiert bereits"
       fi
     else
       log "  ⚠ Kein AUTHENTIK_TOKEN in .env — Application-Check uebersprungen"
@@ -273,7 +273,7 @@ log_section "Schritt 5: Bridge-Container neu erstellen"
 if pct status 120 2>/dev/null | grep -q "running"; then
   log "  docker compose down + up (neue .env laden)..."
   pct exec 120 -- bash -c \
-    "cd /opt/openclaw-proxmox/casaos-lxc-bridge && docker compose down && docker compose up -d" \
+    "cd /opt/jarvis-os-infra/jarvis-lxc-bridge && docker compose down && docker compose up -d" \
     2>&1 | tee -a "$LOG_FILE" || true
   log "  ✓ Bridge-Container neu erstellt"
 else
@@ -302,9 +302,9 @@ else
 fi
 
 # ENV-Verifikation
-VERIFY_NODE=$(pct exec 120 -- docker exec casaos-lxc-bridge-casaos-lxc-bridge-1 \
+VERIFY_NODE=$(pct exec 120 -- docker exec jarvis-lxc-bridge-jarvis-lxc-bridge-1 \
   printenv PROXMOX_NODE 2>/dev/null || echo "FEHLER")
-VERIFY_STORAGE=$(pct exec 120 -- docker exec casaos-lxc-bridge-casaos-lxc-bridge-1 \
+VERIFY_STORAGE=$(pct exec 120 -- docker exec jarvis-lxc-bridge-jarvis-lxc-bridge-1 \
   printenv PROXMOX_STORAGE 2>/dev/null || echo "FEHLER")
 
 if [ "$VERIFY_NODE" = "$NODE_NAME" ] && [ "$VERIFY_STORAGE" = "$STORAGE" ]; then

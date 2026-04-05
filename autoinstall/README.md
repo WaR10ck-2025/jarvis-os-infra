@@ -1,14 +1,14 @@
-# OpenClaw OS — Custom Proxmox Installer
+# J.A.R.V.I.S-OS OS — Custom Proxmox Installer
 
 Bootfähiges USB-Image / ISO das Proxmox VE installiert und
-die OpenClaw Basis-Plattform (CasaOS + Deployment Hub + Nginx Proxy) deployt.
+die J.A.R.V.I.S-OS Basis-Plattform (CasaOS + Deployment Hub + Nginx Proxy) deployt.
 
 **Zwei ISO-Varianten stehen zur Verfügung:**
 
 | ISO | Installations-Phase | Wann verwenden |
 |---|---|---|
-| `proxmox-openclaw.iso` | Vollautomatisch (kein Input) | Headless-Server, CI/CD, Reproduzierbarkeit |
-| `proxmox-openclaw-interactive.iso` | Proxmox-Wizard (Benutzer wählt Disk/Passwort) | Neue Hardware, individuelle Konfiguration |
+| `proxmox-jarvis.iso` | Vollautomatisch (kein Input) | Headless-Server, CI/CD, Reproduzierbarkeit |
+| `proxmox-jarvis-interactive.iso` | Proxmox-Wizard (Benutzer wählt Disk/Passwort) | Neue Hardware, individuelle Konfiguration |
 
 Beide ISOs deployen nach der Installation **automatisch** LXC 110/120/170.
 
@@ -58,23 +58,23 @@ apt install proxmox-auto-install-assistant
 ### Automatische ISO bauen
 
 ```bash
-cd openclaw-proxmox/autoinstall
+cd jarvis-os-infra/autoinstall
 
 # answer.toml anpassen (Passwörter setzen) — dann:
 sudo bash build-iso.sh --pve-iso /path/to/proxmox-ve_8.x.iso
 
-# Output: proxmox-openclaw.iso
+# Output: proxmox-jarvis.iso
 ```
 
 ### Interaktive ISO bauen
 
 ```bash
-cd openclaw-proxmox/autoinstall
+cd jarvis-os-infra/autoinstall
 
 # Kein answer.toml nötig — Proxmox-Wizard fragt alles ab
 sudo bash build-iso.sh --interactive --pve-iso /path/to/proxmox-ve_8.x.iso
 
-# Output: proxmox-openclaw-interactive.iso
+# Output: proxmox-jarvis-interactive.iso
 ```
 
 ---
@@ -88,9 +88,9 @@ sudo bash build-iso.sh --interactive --pve-iso /path/to/proxmox-ve_8.x.iso
 lsblk   # oder: fdisk -l
 
 # Auf USB schreiben (VORSICHT — alle Daten werden gelöscht!):
-dd if=proxmox-openclaw.iso of=/dev/sdX bs=4M status=progress
+dd if=proxmox-jarvis.iso of=/dev/sdX bs=4M status=progress
 # oder:
-dd if=proxmox-openclaw-interactive.iso of=/dev/sdX bs=4M status=progress
+dd if=proxmox-jarvis-interactive.iso of=/dev/sdX bs=4M status=progress
 sync
 ```
 
@@ -114,8 +114,8 @@ sudo bash build-iso.sh --interactive --pve-iso proxmox-ve_8.x.iso --output /dev/
 2. Boot-Reihenfolge: USB-Stick (BIOS/UEFI → Boot Menu)
 3. Proxmox installiert sich **automatisch** (kein Input nötig)
 4. Neustart → **LUKS-Passphrase eingeben** (aus answer.toml → `disk_password`)
-5. `openclaw-first-boot.service` startet automatisch (~5 Min)
-6. Logs verfolgen: `journalctl -u openclaw-first-boot -f`
+5. `jarvis-os-first-boot.service` startet automatisch (~5 Min)
+6. Logs verfolgen: `journalctl -u jarvis-os-first-boot -f`
 
 ## Schritt 4b — Booten (Interaktive ISO)
 
@@ -123,8 +123,8 @@ sudo bash build-iso.sh --interactive --pve-iso proxmox-ve_8.x.iso --output /dev/
 2. Boot-Reihenfolge: USB-Stick (BIOS/UEFI → Boot Menu)
 3. **Proxmox-Installer-Wizard** erscheint → Disk, Hostname, Passwort konfigurieren
 4. Installation starten → Neustart
-5. `openclaw-first-boot.service` startet automatisch (~5 Min)
-6. Logs verfolgen: `journalctl -u openclaw-first-boot -f`
+5. `jarvis-os-first-boot.service` startet automatisch (~5 Min)
+6. Logs verfolgen: `journalctl -u jarvis-os-first-boot -f`
 
 ---
 
@@ -218,15 +218,15 @@ Beim nächsten Boot wird der Pool automatisch via `zfs-unlock.service` entsperrt
 ### First-Boot Logs
 
 ```bash
-journalctl -u openclaw-first-boot -f
-cat /var/log/openclaw-first-boot.log
+journalctl -u jarvis-os-first-boot -f
+cat /var/log/jarvis-os-first-boot.log
 ```
 
 ### First-Boot manuell wiederholen
 
 ```bash
-rm /etc/openclaw-setup.done
-systemctl restart openclaw-first-boot
+rm /etc/jarvis-setup.done
+systemctl restart jarvis-os-first-boot
 ```
 
 ### LXC nicht gestartet

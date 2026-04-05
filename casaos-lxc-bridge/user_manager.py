@@ -137,7 +137,7 @@ def provision_user(username: str, quota: str = "100G",
         if dashboard_type == "ugos":
             casaos_url, tailscale_auth_key = _provision_ugos_vm(
                 conn, user_id, username, casaos_lxc_id,
-                bridge, gateway, subnet, storage, smb_password, api_key, storage_tier, proxmox,
+                casaos_ip, bridge, gateway, subnet, storage, smb_password, api_key, storage_tier, proxmox,
             )
         else:
             casaos_url, tailscale_auth_key = _provision_casaos_lxc(
@@ -341,7 +341,7 @@ def get_user_quota(user_id: int) -> dict:
 
 def _provision_ugos_vm(
     conn, user_id, username, vm_id,
-    bridge, gateway, subnet, storage, smb_password, api_key, storage_tier, proxmox,
+    casaos_ip, bridge, gateway, subnet, storage, smb_password, api_key, storage_tier, proxmox,
 ) -> tuple[str, str]:
     """
     UGOS-VM Provisioning-Pfad (KVM/QEMU).
@@ -353,6 +353,7 @@ def _provision_ugos_vm(
       - start_vm + wait_for_vm_ready statt start_lxc
       - Kein App-Store / Bridge-Env (UGOS hat eigenes Dashboard)
       - QEMU Guest Agent für SSH-lose Exec-Befehle
+      - Netzwerk via Guest Agent (UGOS nutzt ifupdown, kein cloud-init)
     """
     _set_step(conn, user_id, "cloning_ugos_vm")
     hostname = f"ugos-{username}"
@@ -371,6 +372,11 @@ def _provision_ugos_vm(
     _set_step(conn, user_id, "starting_casaos_lxc")
     proxmox.start_vm(vm_id)
     proxmox.wait_for_vm_ready(vm_id, timeout=300, boot_wait=120)
+
+    # Schritt 6b: UGOS-Netzwerk konfigurieren (ifupdown, kein cloud-init)
+    _set_step(conn, user_id, "configuring_ugos_network")
+    proxmox.configure_ugos_network(vm_id, casaos_ip, gateway)
+    logger.info(f"UGOS VM {vm_id}: Netzwerk auf {casaos_ip}/24 gw {gateway} gesetzt")
 
     # NFS-Shares in VM mounten (via QEMU Guest Agent)
     try:
@@ -438,7 +444,7 @@ def _provision_casaos_lxc(
     proxmox.start_lxc(lxc_id)
     proxmox.wait_for_lxc_ready(lxc_id, timeout=120)
 
-    # OpenClaw App-Store in User-CasaOS registrieren
+    # J.A.R.V.I.S-OS App-Store in User-CasaOS registrieren
     try:
         proxmox.exec_in_lxc(lxc_id,
             f"for i in $(seq 1 12); do "

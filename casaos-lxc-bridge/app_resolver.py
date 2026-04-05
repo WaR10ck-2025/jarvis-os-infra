@@ -229,7 +229,7 @@ def _resolve_local(app_id: str) -> AppMeta | None:
         icon=app_def.get("icon", "") if app_def else "",
         category=app_def.get("category", "Utilities") if app_def else "Utilities",
         port=app_def.get("port", 80) if app_def else 80,
-        developer="OpenClaw Local Template",
+        developer="J.A.R.V.I.S-OS Local Template",
         compose_yaml=compose_yaml,
         store_url="local",
         store_type="local",

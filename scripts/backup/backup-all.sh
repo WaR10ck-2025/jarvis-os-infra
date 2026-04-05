@@ -1,7 +1,7 @@
 #!/bin/bash
 # backup-all.sh — Master-Backup-Script
 # Ruft alle Layer auf, schreibt Gesamt-Log, sendet Notification.
-# Cron-Einstiegspunkt: /etc/cron.d/openclaw-backup
+# Cron-Einstiegspunkt: /etc/cron.d/jarvis-os-backup
 #
 # Verwendung:
 #   backup-all.sh                    # Alle Layer (1, 2, 3)
@@ -45,7 +45,7 @@ LAYER3_STATUS="skipped"
 START_TIME=$SECONDS
 
 log "════════════════════════════════════════════════════════"
-log "  OpenClaw Backup-System — Start: $TIMESTAMP"
+log "  J.A.R.V.I.S-OS Backup-System — Start: $TIMESTAMP"
 log "  Layer: $RUN_LAYERS"
 log "════════════════════════════════════════════════════════"
 
@@ -112,7 +112,7 @@ if [ "$NTFY_ENABLED" = "true" ] && [ -n "$NTFY_URL" ]; then
   MSG="${STATUS_ICON} Backup ${STATUS_TEXT} | ${DURATION_MIN}Min | L1:${LAYER1_STATUS} L2:${LAYER2_STATUS} L3:${LAYER3_STATUS}"
 
   curl -s -X POST "$NTFY_URL" \
-    -H "Title: OpenClaw Backup Gesamt: $STATUS_TEXT" \
+    -H "Title: J.A.R.V.I.S-OS Backup Gesamt: $STATUS_TEXT" \
     -H "Priority: $PRIO" \
     -H "Tags: backup" \
     -d "$MSG" -o /dev/null 2>/dev/null || true

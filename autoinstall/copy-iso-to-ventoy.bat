@@ -1,5 +1,5 @@
 @echo off
-title OpenClaw ISO auf Ventoy kopieren
+title J.A.R.V.I.S-OS ISO auf Ventoy kopieren
 cd /d "%~dp0"
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0openclaw-tools.ps1" copy
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0jarvis-tools.ps1" copy
 pause

@@ -1,20 +1,20 @@
-# /etc/systemd/system/openclaw-first-boot.service
+# /etc/systemd/system/jarvis-os-first-boot.service
 #
-# OpenClaw First-Boot Setup Service
+# J.A.R.V.I.S-OS First-Boot Setup Service
 # Läuft einmalig nach erstem Proxmox-Boot und deployt die Basis-Plattform.
 #
 # Installation (wird von build-iso.sh automatisch injiziert):
-#   cp first-boot.service /etc/systemd/system/openclaw-first-boot.service
-#   cp first-boot.sh /root/openclaw-first-boot.sh
-#   chmod +x /root/openclaw-first-boot.sh
-#   systemctl enable openclaw-first-boot.service
+#   cp first-boot.service /etc/systemd/system/jarvis-os-first-boot.service
+#   cp first-boot.sh /root/jarvis-os-first-boot.sh
+#   chmod +x /root/jarvis-os-first-boot.sh
+#   systemctl enable jarvis-os-first-boot.service
 #
 # Logs verfolgen:
-#   journalctl -u openclaw-first-boot -f
-#   cat /var/log/openclaw-first-boot.log
+#   journalctl -u jarvis-os-first-boot -f
+#   cat /var/log/jarvis-os-first-boot.log
 
 [Unit]
-Description=OpenClaw First-Boot Setup (Nginx Proxy + CasaOS + Deployment Hub)
+Description=J.A.R.V.I.S-OS First-Boot Setup (Nginx Proxy + CasaOS + Deployment Hub)
 Documentation=https://github.com/WaR10ck-2025/wine-docker-manager
 
 # Nach Netzwerk und Proxmox-Cluster warten
@@ -25,17 +25,17 @@ Wants=network-online.target
 Requires=pve-storage.target
 
 # Nur einmal ausführen — wenn Done-Flag existiert, überspringen
-ConditionPathExists=!/etc/openclaw-setup.done
+ConditionPathExists=!/etc/jarvis-setup.done
 
 [Service]
 Type=oneshot
-ExecStart=/root/openclaw-first-boot.sh
+ExecStart=/root/jarvis-os-first-boot.sh
 StandardInput=tty
 TTYPath=/dev/tty1
 TTYReset=yes
 StandardOutput=journal+console
 StandardError=journal+console
-SyslogIdentifier=openclaw-first-boot
+SyslogIdentifier=jarvis-os-first-boot
 
 # Timeout: 30 Minuten (Docker Image Downloads können dauern)
 TimeoutStartSec=1800

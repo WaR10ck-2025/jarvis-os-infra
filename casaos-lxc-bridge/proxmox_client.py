@@ -353,6 +353,30 @@ class ProxmoxClient:
             "name": hostname,
         })
 
+    def configure_ugos_network(
+        self, vm_id: int, ip: str, gateway: str, netmask: str = "255.255.255.0"
+    ) -> None:
+        """
+        Setzt die UGOS-Netzwerkkonfiguration via QEMU Guest Agent.
+        UGOS nutzt ifupdown (kein cloud-init) — Config liegt in
+        /etc/network/interfaces.d/ifcfg-enp6s18 (overlay-persistent).
+        """
+        ifcfg = (
+            f"auto enp6s18\n"
+            f"iface enp6s18 inet static\n"
+            f" address {ip}\n"
+            f" netmask {netmask}\n"
+            f" gateway {gateway}\n"
+        )
+        resolv = "nameserver 8.8.8.8\nnameserver 1.1.1.1\n"
+
+        # Netzwerk-Config schreiben + Interface neu konfigurieren
+        self.exec_in_vm(vm_id, f"cat > /etc/network/interfaces.d/ifcfg-enp6s18 << 'NETEOF'\n{ifcfg}NETEOF")
+        self.exec_in_vm(vm_id, f"cat > /etc/resolv.conf << 'DNSEOF'\n{resolv}DNSEOF")
+        self.exec_in_vm(vm_id, f"ip addr flush dev enp6s18 && "
+                        f"ip addr add {ip}/24 dev enp6s18 && "
+                        f"ip route add default via {gateway} 2>/dev/null || true")
+
     def start_vm(self, vm_id: int) -> None:
         self._request("POST", f"/nodes/{PROXMOX_NODE}/qemu/{vm_id}/status/start")
 

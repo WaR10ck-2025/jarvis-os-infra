@@ -1,13 +1,13 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-    Kopiert das OpenClaw ISO auf einen Ventoy-USB-Stick und verifiziert via SHA256.
+    Kopiert das J.A.R.V.I.S-OS ISO auf einen Ventoy-USB-Stick und verifiziert via SHA256.
 
 .PARAMETER Drive
     Laufwerksbuchstabe des Ventoy-Sticks (z.B. D). Wenn nicht angegeben: interaktive Auswahl.
 
 .PARAMETER IsoPath
-    Pfad zur ISO-Datei. Standard: proxmox-openclaw.iso im selben Verzeichnis.
+    Pfad zur ISO-Datei. Standard: proxmox-jarvis.iso im selben Verzeichnis.
 
 .EXAMPLE
     .\copy-iso-to-ventoy.ps1
@@ -31,12 +31,12 @@ function Write-Head { param($msg) Write-Host "`n$msg" -ForegroundColor Yellow }
 
 # -- ISO-Pfad bestimmen -------------------------------------------------------
 if (-not $IsoPath) {
-    $IsoPath = Join-Path $PSScriptRoot "proxmox-openclaw.iso"
+    $IsoPath = Join-Path $PSScriptRoot "proxmox-jarvis.iso"
 }
 
 Write-Host ""
 Write-Host "========================================================" -ForegroundColor Cyan
-Write-Host "       OpenClaw -- ISO auf Ventoy-Stick kopieren        " -ForegroundColor Cyan
+Write-Host "       J.A.R.V.I.S-OS -- ISO auf Ventoy-Stick kopieren        " -ForegroundColor Cyan
 Write-Host "========================================================" -ForegroundColor Cyan
 
 # -- ISO pruefen --------------------------------------------------------------
@@ -200,5 +200,5 @@ Write-Host "  ISO:    $TargetPath" -ForegroundColor Green
 Write-Host "  SHA256: $hashDst" -ForegroundColor Green
 Write-Host ""
 Write-Host "  Stick kann jetzt abgezogen werden." -ForegroundColor Yellow
-Write-Host "  Booten -> Ventoy-Menu -> proxmox-openclaw.iso waehlen" -ForegroundColor Yellow
+Write-Host "  Booten -> Ventoy-Menu -> proxmox-jarvis.iso waehlen" -ForegroundColor Yellow
 Write-Host ""

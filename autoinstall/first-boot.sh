@@ -1,5 +1,5 @@
 #!/bin/bash
-# first-boot.sh — OpenClaw Basis-Plattform Setup
+# first-boot.sh — J.A.R.V.I.S-OS Basis-Plattform Setup
 #
 # Läuft EINMAL nach dem ersten Proxmox-Boot (via first-boot.service).
 # Deployt die drei Basis-LXCs: Nginx Proxy Manager, CasaOS, Deployment Hub.
@@ -10,19 +10,19 @@
 #   - LUKS entsperrt (System läuft)
 #   - Internetzugang (DHCP aktiv)
 #
-# Logs: journalctl -u openclaw-first-boot -f
+# Logs: journalctl -u jarvis-os-first-boot -f
 
 set -e
 
-LOG_FILE="/var/log/openclaw-first-boot.log"
-DONE_FLAG="/etc/openclaw-setup.done"
-REPO_URL="https://github.com/WaR10ck-2025/openclaw-proxmox.git"
-REPO_DIR="/opt/openclaw-proxmox"
+LOG_FILE="/var/log/jarvis-os-first-boot.log"
+DONE_FLAG="/etc/jarvis-setup.done"
+REPO_URL="https://github.com/WaR10ck-2025/jarvis-os-infra.git"
+REPO_DIR="/opt/jarvis-os-infra"
 SCRIPTS="$REPO_DIR/scripts"
 TEMPLATE="debian-12-standard_12.12-1_amd64.tar.zst"
 
 # Remote-Logging via ntfy.sh (kostenlos, kein Setup, kein Account)
-NTFY_TOPIC="openclaw-first-boot-$(cat /etc/machine-id 2>/dev/null | head -c 8 || echo 'default')"
+NTFY_TOPIC="jarvis-os-first-boot-$(cat /etc/machine-id 2>/dev/null | head -c 8 || echo 'default')"
 NTFY_URL="https://ntfy.sh/${NTFY_TOPIC}"
 
 # Logging-Helper
@@ -39,7 +39,7 @@ log_remote() {
 log_remote_dump() {
   local status="${1:-done}"
   curl -s \
-    -H "Title: OpenClaw First-Boot: ${status}" \
+    -H "Title: J.A.R.V.I.S-OS First-Boot: ${status}" \
     -H "Priority: high" \
     -d "$(tail -100 "$LOG_FILE")" \
     "$NTFY_URL" >/dev/null 2>&1 || true
@@ -65,7 +65,7 @@ echo -e "\033c" > "$TTY_DEV" 2>/dev/null || true
 # Bei Fehler/Crash: Log automatisch an ntfy senden
 trap 'log_remote_dump "CRASHED (exit $?)"' ERR
 
-log_section "OpenClaw First-Boot Setup startet"
+log_section "J.A.R.V.I.S-OS First-Boot Setup startet"
 log_remote "=== FIRST-BOOT GESTARTET === Topic: $NTFY_TOPIC | $(hostname) | $(ip -4 addr show | grep -oP '(?<=inet\s)\d+(\.\d+){3}' | grep -v 127 | head -1 || echo 'keine IP')"
 
 # ── Schritt 1: Warten bis Netzwerk bereit ─────────────────────────────────
@@ -104,7 +104,7 @@ apt-get update -qq
 apt-get install -y -qq git curl
 log "✓ Basis-Pakete installiert"
 
-log_section "openclaw-proxmox Repo klonen"
+log_section "jarvis-os-infra Repo klonen"
 tty_write "  Repo klonen..."
 if [ -d "$REPO_DIR/.git" ]; then
   log "Repo bereits vorhanden — aktualisiere..."
@@ -137,7 +137,7 @@ find_backup_source() {
     if [ -z "$top_mount" ] || [ "$top_mount" != "$dev" ]; then
       mount "$dev" "$BACKUP_USB_MOUNT" 2>/dev/null || true
     fi
-    if [ -d "${BACKUP_USB_MOUNT}/openclaw-backups" ]; then
+    if [ -d "${BACKUP_USB_MOUNT}/jarvis-os-backups" ]; then
       echo "$dev"
       return 0
     fi
@@ -154,16 +154,16 @@ show_boot_menu() {
 
   backup_dev=$(find_backup_source 2>/dev/null || true)
   if [ -n "$backup_dev" ] && mountpoint -q "$BACKUP_USB_MOUNT"; then
-    lxc_count=$(ls "${BACKUP_USB_MOUNT}/openclaw-backups/dump/"*.tar.zst 2>/dev/null | wc -l || echo 0)
-    vm_count=$(ls "${BACKUP_USB_MOUNT}/openclaw-backups/dump/"*.vma.zst 2>/dev/null | wc -l || echo 0)
-    cfg_count=$(find "${BACKUP_USB_MOUNT}/openclaw-backups/configs/" -name "*.age" 2>/dev/null | wc -l || echo 0)
+    lxc_count=$(ls "${BACKUP_USB_MOUNT}/jarvis-os-backups/dump/"*.tar.zst 2>/dev/null | wc -l || echo 0)
+    vm_count=$(ls "${BACKUP_USB_MOUNT}/jarvis-os-backups/dump/"*.vma.zst 2>/dev/null | wc -l || echo 0)
+    cfg_count=$(find "${BACKUP_USB_MOUNT}/jarvis-os-backups/configs/" -name "*.age" 2>/dev/null | wc -l || echo 0)
     free_gb=$(df -BG "$BACKUP_USB_MOUNT" 2>/dev/null | tail -1 | awk '{print $4}' | tr -d 'G' || echo "?")
     [ "$((lxc_count + vm_count + cfg_count))" -gt 0 ] && backup_found=true
   fi
 
   tty_write ""
   tty_write "============================================================"
-  tty_write "           OpenClaw Proxmox -- Willkommen                   "
+  tty_write "           J.A.R.V.I.S-OS Proxmox -- Willkommen                   "
   tty_write "============================================================"
   tty_write "  [1]  Fresh-Install      Neue Installation                 "
   if [ "$backup_found" = "true" ]; then
@@ -217,7 +217,7 @@ if [ "$SELECTED_MODE" = "restore" ]; then
   tty_write ""
   log_section "DISASTER RECOVERY: Vollständige Wiederherstellung"
   log_remote "DISASTER RECOVERY gestartet"
-  HOOK_SCRIPT="/root/openclaw-restore-hook.sh"
+  HOOK_SCRIPT="/root/jarvis-restore-hook.sh"
   [ ! -f "$HOOK_SCRIPT" ] && HOOK_SCRIPT="${REPO_DIR}/autoinstall/restore-hook.sh"
   if [ -f "$HOOK_SCRIPT" ]; then
     tty_write "  Starte restore-hook.sh ..."
@@ -228,7 +228,7 @@ if [ "$SELECTED_MODE" = "restore" ]; then
   else
     tty_write "  [!!] restore-hook.sh nicht gefunden!"
     log "✗ restore-hook.sh nicht gefunden — Restore abgebrochen"
-    log "  Gesucht: /root/openclaw-restore-hook.sh"
+    log "  Gesucht: /root/jarvis-restore-hook.sh"
     log_remote "FEHLER: restore-hook.sh nicht gefunden!"
     log_remote_dump "FAILED"
     pvebanner 2>/dev/null || true
@@ -390,7 +390,7 @@ PROXMOX_IP=$(ip -4 addr show | grep -oP '(?<=inet\s)\d+(\.\d+){3}' | grep -v 127
 
 tty_write ""
 tty_write "============================================================"
-tty_write "               OpenClaw Setup abgeschlossen                  "
+tty_write "               J.A.R.V.I.S-OS Setup abgeschlossen                  "
 tty_write "============================================================"
 tty_write ""
 tty_write "  LXC 110 (Nginx Proxy Manager): http://192.168.10.140:81"

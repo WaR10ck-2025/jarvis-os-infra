@@ -21,9 +21,9 @@ AUTHENTIK_URL = os.getenv("AUTHENTIK_URL", "http://192.168.10.125:9000")
 AUTHENTIK_TOKEN = os.getenv("AUTHENTIK_TOKEN", "")
 
 # Standard-Gruppen — werden beim ersten User-Anlegen auto-erstellt falls nicht vorhanden
-GROUP_USERS = "openclaw-users"
-GROUP_ADMINS = "openclaw-admins"
-GROUP_GUESTS = "openclaw-guests"
+GROUP_USERS = "jarvis-users"
+GROUP_ADMINS = "jarvis-admins"
+GROUP_GUESTS = "jarvis-guests"
 
 logger = logging.getLogger(__name__)
 
@@ -83,7 +83,7 @@ def create_user(username: str, email: str = "", group: str = GROUP_USERS) -> str
         logger.debug("Authentik deaktiviert (AUTHENTIK_TOKEN nicht gesetzt)")
         return ""
     try:
-        user_email = email or f"{username}@openclaw.local"
+        user_email = email or f"{username}@jarvis.local"
         result = _request("POST", "/core/users/", {
             "username": username,
             "name": username,

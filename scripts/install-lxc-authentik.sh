@@ -16,7 +16,7 @@ LXC_HOSTNAME=authentik-sso
 LXC_STORAGE=${PROXMOX_STORAGE:-local-lvm}
 LXC_MEMORY=2048
 LXC_CORES=2
-PROXMOX_NODE=${PROXMOX_NODE:-openclaw}
+PROXMOX_NODE=${PROXMOX_NODE:-jarvis}
 
 # Debian 12 Template (ggf. anpassen)
 TEMPLATE="local:vztmpl/debian-12-standard_12.12-1_amd64.tar.zst"
