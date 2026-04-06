@@ -32,13 +32,13 @@ data:
               vm: "admin"
               user: "admin"
 
-      # Admin-Service (LXC 160) — aktivieren sobald /metrics Endpoint existiert
-      # - job_name: "admin-service"
-      #   metrics_path: /metrics
-      #   static_configs:
-      #     - targets: ["192.168.10.160:8300"]
-      #       labels:
-      #         service: "admin-service"
+      # Admin-Service (LXC 160)
+      - job_name: "admin-service"
+        metrics_path: /metrics
+        static_configs:
+          - targets: ["192.168.10.160:8300"]
+            labels:
+              service: "admin-service"
 
       # Proxmox Host Node-Exporter (falls installiert)
       # - job_name: "proxmox-host"
