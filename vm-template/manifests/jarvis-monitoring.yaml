@@ -40,17 +40,22 @@ data:
             labels:
               service: "admin-service"
 
-      # Proxmox Host Node-Exporter (falls installiert)
-      # - job_name: "proxmox-host"
-      #   static_configs:
-      #     - targets: ["192.168.10.147:9100"]
+      # User-VMs statische Targets (via DNAT-IPs auf Proxmox-Host)
+      # Schema: 192.168.10.{170+offset} → 10.{user_id}.0.10:9100
+      - job_name: "user-vms"
+        static_configs:
+          - targets: ["192.168.10.170:9100"]
+            labels:
+              vm: "alice"
+              user: "alice"
+              vm_id: "1000"
+              profile: "small"
 
-      # User-VMs (dynamisch via Admin-Service SD)
-      # Aktivieren sobald Prometheus SD-Endpoint im Admin-Service existiert:
-      # - job_name: "user-vms"
-      #   http_sd_configs:
-      #     - url: "http://192.168.10.160:8300/api/v1/prometheus/targets"
-      #       refresh_interval: 60s
+      # User-VMs dynamisch via Admin-Service SD (ergaenzt statische)
+      - job_name: "user-vms-sd"
+        http_sd_configs:
+          - url: "http://192.168.10.160:8300/api/v1/prometheus/targets"
+            refresh_interval: 60s
 
       # k3s API-Server Metriken
       - job_name: "kubernetes-apiservers"

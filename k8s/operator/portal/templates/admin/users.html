@@ -19,6 +19,8 @@
                 <input type="text" name="username" id="username" required
                     pattern="^[a-z][a-z0-9-]{1,30}[a-z0-9]$"
                     placeholder="z.B. alice, bob"
+                    title="Nur Kleinbuchstaben, Zahlen und Bindestriche (3-32 Zeichen)"
+                    oninput="this.value = this.value.toLowerCase().replace(/[^a-z0-9-]/g, '')"
                     style="width: 100%;">
             </div>
             <div style="min-width: 180px;">
@@ -43,8 +45,8 @@
         {% set u_status = user.status | default('unknown') %}
         <div class="card" style="position: relative;">
             <a href="/admin/users/{{ user.user_id }}" style="text-decoration: none; color: inherit; display: block;">
-                <div class="card-header">
-                    <span class="card-title">{{ user.username }}</span>
+                <div class="card-header" style="flex-direction: column; align-items: center; gap: 0.4rem;">
+                    <span class="card-title" style="font-size: 1.25rem;">{{ user.username }}</span>
                     <div style="display: flex; gap: 0.4rem; align-items: center;">
                         <span class="badge badge-info">{{ user.profile | default('medium') }}</span>
                         {% if u_status == 'ready' %}
@@ -88,9 +90,10 @@
                 {% endif %}
             </a>
             {% if u_status not in ['provisioning', 'deleting'] %}
-            <form method="post" action="/admin/users/delete/{{ user.user_id }}" style="position: absolute; top: 1rem; right: 1rem;"
+            <form method="post" action="/admin/users/delete/{{ user.user_id }}" style="position: absolute; top: 0.5rem; right: 0.5rem; z-index: 2;"
                   onsubmit="return showConfirm(event, '{{ user.username }}', this);">
-                <button type="submit" class="btn btn-ghost btn-sm" style="padding: 0.2rem 0.5rem; font-size: 0.7rem; color: var(--danger);"
+                <button type="submit" class="btn btn-ghost btn-sm" style="padding: 0.15rem 0.4rem; font-size: 0.65rem; color: var(--danger); opacity: 0.5; transition: opacity 0.2s;"
+                        onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.5'"
                         title="User + VM loeschen">&#10005;</button>
             </form>
             {% endif %}

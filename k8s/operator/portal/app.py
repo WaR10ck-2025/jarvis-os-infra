@@ -391,6 +391,7 @@ if VM_MODE == "admin":
         profile: str = Form("medium"),
     ):
         """Admin: User anlegen (VM wird provisioniert)."""
+        username = username.lower().strip()
         try:
             await _admin_api("POST", "/api/v1/users", {
                 "username": username,

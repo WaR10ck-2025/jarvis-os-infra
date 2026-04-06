@@ -133,6 +133,12 @@ spec:
                   name: jarvis-oidc-config
                   key: OIDC_REDIRECT_URI
                   optional: true
+            - name: OIDC_DISCOVERY_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: jarvis-oidc-config
+                  key: OIDC_DISCOVERY_URL
+                  optional: true
             - name: AUTHENTIK_BASE_URL
               valueFrom:
                 configMapKeyRef:

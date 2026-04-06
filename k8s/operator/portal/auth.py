@@ -39,6 +39,7 @@ OIDC_AUTHORIZE_URL = os.getenv("OIDC_AUTHORIZE_URL", "")
 OIDC_TOKEN_URL = os.getenv("OIDC_TOKEN_URL", "")
 OIDC_USERINFO_URL = os.getenv("OIDC_USERINFO_URL", "")
 OIDC_REDIRECT_URI = os.getenv("OIDC_REDIRECT_URI", "")
+OIDC_DISCOVERY_URL = os.getenv("OIDC_DISCOVERY_URL", "")
 SESSION_SECRET = os.getenv("SESSION_SECRET", secrets.token_hex(32))
 
 # Routen die ohne Login erreichbar sein muessen
@@ -51,16 +52,22 @@ PUBLIC_PATHS = {"/auth/login", "/auth/callback", "/auth/logout", "/api/health"}
 oauth = OAuth()
 
 if OIDC_ENABLED and OIDC_CLIENT_ID:
-    oauth.register(
-        name="authentik",
-        client_id=OIDC_CLIENT_ID,
-        client_secret=OIDC_CLIENT_SECRET,
-        authorize_url=OIDC_AUTHORIZE_URL,
-        access_token_url=OIDC_TOKEN_URL,
-        userinfo_endpoint=OIDC_USERINFO_URL,
-        client_kwargs={"scope": "openid email profile"},
-    )
-    logger.info("OIDC aktiviert — Client: %s", OIDC_CLIENT_ID)
+    # server_metadata_url liefert jwks_uri, authorize/token/userinfo URLs automatisch
+    # Ohne jwks_uri schlaegt der Token-Exchange fehl ("Missing jwks_uri in metadata")
+    oauth_kwargs = {
+        "name": "authentik",
+        "client_id": OIDC_CLIENT_ID,
+        "client_secret": OIDC_CLIENT_SECRET,
+        "client_kwargs": {"scope": "openid email profile"},
+    }
+    if OIDC_DISCOVERY_URL:
+        oauth_kwargs["server_metadata_url"] = OIDC_DISCOVERY_URL
+    else:
+        oauth_kwargs["authorize_url"] = OIDC_AUTHORIZE_URL
+        oauth_kwargs["access_token_url"] = OIDC_TOKEN_URL
+        oauth_kwargs["userinfo_endpoint"] = OIDC_USERINFO_URL
+    oauth.register(**oauth_kwargs)
+    logger.info("OIDC aktiviert — Client: %s, Discovery: %s", OIDC_CLIENT_ID, bool(OIDC_DISCOVERY_URL))
 else:
     logger.info("OIDC deaktiviert — Portal ohne Login nutzbar")
 
