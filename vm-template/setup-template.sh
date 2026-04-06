@@ -183,6 +183,21 @@ spec:
           jsonPath: .metadata.creationTimestamp
 CRDEOF
 
+# Operator + Portal + Monitoring Manifeste aus dem Build-Verzeichnis kopieren
+# (Wird beim Template-Build via scp nach /opt/jarvis-build/manifests/ gelegt)
+BUILD_MANIFESTS="/opt/jarvis-build/manifests"
+if [ -d "$BUILD_MANIFESTS" ]; then
+    echo "  → Kopiere Operator/Portal/Monitoring-Manifeste..."
+    cp "$BUILD_MANIFESTS/jarvis-operator.yaml"           "$MANIFESTS_DIR/" 2>/dev/null || echo "    (operator: skipped)"
+    cp "$BUILD_MANIFESTS/jarvis-portal.yaml"             "$MANIFESTS_DIR/" 2>/dev/null || echo "    (portal: skipped)"
+    cp "$BUILD_MANIFESTS/jarvis-monitoring.yaml"         "$MANIFESTS_DIR/" 2>/dev/null || echo "    (monitoring: skipped)"
+    cp "$BUILD_MANIFESTS/jarvis-grafana-dashboards.yaml" "$MANIFESTS_DIR/" 2>/dev/null || echo "    (grafana: skipped)"
+else
+    echo "  WARNUNG: $BUILD_MANIFESTS nicht gefunden — nur namespace + CRD installiert!"
+    echo "  Beim Template-Build muessen die Manifeste vorher dorthin kopiert werden:"
+    echo "    scp -r vm-template/manifests/ root@<vm>:/opt/jarvis-build/manifests/"
+fi
+
 # -----------------------------------------------------------------------
 # 6. Firstboot-Service (laeuft einmalig nach Clone)
 # -----------------------------------------------------------------------
@@ -216,16 +231,17 @@ echo "Modus: $VM_MODE"
 # 1. Hostname setzen
 hostnamectl set-hostname "jarvis-${VM_USERNAME}"
 
-# 2. k3s Node-IP anpassen
+# 2. k3s Node-IP via /etc/rancher/k3s/config.yaml setzen
+# Cloud-init hat netplan bereits angewendet — eth0 sollte die richtige IP haben.
+# k3s liest config.yaml beim Start; persistenter als sed auf systemd-Service.
 CURRENT_IP=$(ip -4 addr show eth0 2>/dev/null | grep -oP '(?<=inet\s)\d+(\.\d+){3}' || echo "$VM_IP")
 if [ -n "$CURRENT_IP" ] && [ "$CURRENT_IP" != "0.0.0.0" ]; then
-    # k3s Service-File anpassen
-    if grep -q "node-ip" /etc/systemd/system/k3s.service; then
-        sed -i "s/--node-ip [^ ]*/--node-ip $CURRENT_IP/" /etc/systemd/system/k3s.service
-    else
-        sed -i "s|server'|server' \\\\\n    '--node-ip' '$CURRENT_IP'|" /etc/systemd/system/k3s.service
-    fi
-    systemctl daemon-reload
+    echo "Setze k3s node-ip = $CURRENT_IP"
+    mkdir -p /etc/rancher/k3s
+    cat > /etc/rancher/k3s/config.yaml << CFGEOF
+node-ip: $CURRENT_IP
+node-name: jarvis-${VM_USERNAME}
+CFGEOF
     systemctl restart k3s
 fi
 
@@ -273,11 +289,13 @@ FBEOF
 chmod +x /opt/jarvis/firstboot.sh
 
 # systemd-Service fuer firstboot
+# WICHTIG: After=cloud-final.service — sonst laeuft firstboot bevor cloud-init
+# das Netzwerk via netplan konfiguriert hat (eth0 hat dann nur Link-Local).
 cat > /etc/systemd/system/jarvis-firstboot.service << 'EOF'
 [Unit]
 Description=J.A.R.V.I.S-OS First Boot Configuration
-After=network-online.target k3s.service
-Wants=network-online.target
+After=cloud-final.service network-online.target k3s.service
+Wants=network-online.target cloud-final.service
 ConditionPathExists=!/opt/jarvis/.firstboot-done
 
 [Service]
