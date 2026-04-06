@@ -1,4 +1,4 @@
-# jarvis-portal.yaml — Portal Deployment fuer k3s (hostPath-basiert)
+# jarvis-portal.yaml — Portal Deployment fuer k3s (ghcr.io Image)
 # Wird automatisch von k3s angewendet wenn in /var/lib/rancher/k3s/server/manifests/
 ---
 apiVersion: v1
@@ -52,24 +52,11 @@ spec:
         app.kubernetes.io/part-of: jarvis-os
     spec:
       serviceAccountName: jarvis-portal
-      initContainers:
-        - name: install-deps
-          image: python:3.12-slim
-          command: ["/bin/sh", "-c"]
-          args:
-            - pip install --no-cache-dir --target=/deps -r /app/requirements.txt
-          volumeMounts:
-            - name: deps
-              mountPath: /deps
-            - name: portal-code
-              mountPath: /app
-              readOnly: true
       containers:
         - name: portal
-          image: python:3.12-slim
+          image: ghcr.io/war10ck-2025/jarvis-portal:latest
+          imagePullPolicy: Always
           env:
-            - name: PYTHONPATH
-              value: /deps
             - name: VM_MODE
               valueFrom:
                 configMapKeyRef:
@@ -100,7 +87,58 @@ spec:
               value: /opt/jarvis/catalog.json
             - name: APPS_NAMESPACE
               value: default
-          command: ["python", "-m", "uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8080", "--app-dir", "/app"]
+            # --- OIDC-Authentifizierung (Authentik) ---
+            # ConfigMap jarvis-oidc-config wird vom Admin-Service/firstboot erstellt.
+            # OIDC_ENABLED=false → Portal ohne Login nutzbar (default).
+            # Spaeter aktivierbar: OIDC_ENABLED=true in der ConfigMap setzen.
+            - name: OIDC_ENABLED
+              valueFrom:
+                configMapKeyRef:
+                  name: jarvis-oidc-config
+                  key: OIDC_ENABLED
+                  optional: true
+            - name: OIDC_CLIENT_ID
+              valueFrom:
+                configMapKeyRef:
+                  name: jarvis-oidc-config
+                  key: OIDC_CLIENT_ID
+                  optional: true
+            - name: OIDC_CLIENT_SECRET
+              valueFrom:
+                configMapKeyRef:
+                  name: jarvis-oidc-config
+                  key: OIDC_CLIENT_SECRET
+                  optional: true
+            - name: OIDC_AUTHORIZE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: jarvis-oidc-config
+                  key: OIDC_AUTHORIZE_URL
+                  optional: true
+            - name: OIDC_TOKEN_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: jarvis-oidc-config
+                  key: OIDC_TOKEN_URL
+                  optional: true
+            - name: OIDC_USERINFO_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: jarvis-oidc-config
+                  key: OIDC_USERINFO_URL
+                  optional: true
+            - name: OIDC_REDIRECT_URI
+              valueFrom:
+                configMapKeyRef:
+                  name: jarvis-oidc-config
+                  key: OIDC_REDIRECT_URI
+                  optional: true
+            - name: AUTHENTIK_BASE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: jarvis-oidc-config
+                  key: AUTHENTIK_BASE_URL
+                  optional: true
           ports:
             - containerPort: 8080
               name: http
@@ -124,26 +162,14 @@ spec:
               memory: "256Mi"
               cpu: "500m"
           volumeMounts:
-            - name: deps
-              mountPath: /deps
-              readOnly: true
-            - name: portal-code
-              mountPath: /app
-              readOnly: true
             - name: jarvis-data
               mountPath: /opt/jarvis
               readOnly: true
       volumes:
-        - name: deps
-          emptyDir: {}
-        - name: portal-code
-          hostPath:
-            path: /opt/jarvis/portal
-            type: Directory
         - name: jarvis-data
           hostPath:
             path: /opt/jarvis
-            type: Directory
+            type: DirectoryOrCreate
 ---
 apiVersion: v1
 kind: Service

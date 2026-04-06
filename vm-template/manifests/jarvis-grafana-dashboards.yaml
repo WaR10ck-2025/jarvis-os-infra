@@ -1,0 +1,616 @@
+# jarvis-grafana-dashboards.yaml — Grafana Dashboard-JSONs als ConfigMap
+# Wird zusammen mit jarvis-monitoring.yaml auf der Admin-VM deployed.
+# 3 Dashboards: Cluster-Uebersicht, Proxmox-Host, Admin-Service
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboards
+  namespace: jarvis-system
+  labels:
+    app: grafana
+    app.kubernetes.io/part-of: jarvis-os
+data:
+  cluster-overview.json: |
+    {
+      "uid": "jarvis-cluster-overview",
+      "title": "J.A.R.V.I.S-OS Cluster-Uebersicht",
+      "tags": ["jarvis", "overview"],
+      "timezone": "Europe/Berlin",
+      "editable": true,
+      "refresh": "30s",
+      "time": { "from": "now-1h", "to": "now" },
+      "panels": [
+        {
+          "id": 1,
+          "title": "Registrierte User",
+          "type": "stat",
+          "gridPos": { "h": 4, "w": 4, "x": 0, "y": 0 },
+          "targets": [{ "expr": "jarvis_admin_users_total", "legendFormat": "" }],
+          "fieldConfig": {
+            "defaults": {
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "blue", "value": null },
+                  { "color": "green", "value": 1 }
+                ]
+              },
+              "unit": "short"
+            }
+          },
+          "options": { "colorMode": "background", "graphMode": "none", "textMode": "value" }
+        },
+        {
+          "id": 2,
+          "title": "Aktive User",
+          "type": "stat",
+          "gridPos": { "h": 4, "w": 4, "x": 4, "y": 0 },
+          "targets": [{ "expr": "jarvis_admin_users_active", "legendFormat": "" }],
+          "fieldConfig": {
+            "defaults": {
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "blue", "value": null },
+                  { "color": "green", "value": 1 }
+                ]
+              },
+              "unit": "short"
+            }
+          },
+          "options": { "colorMode": "background", "graphMode": "none", "textMode": "value" }
+        },
+        {
+          "id": 3,
+          "title": "Laufende VMs",
+          "type": "stat",
+          "gridPos": { "h": 4, "w": 4, "x": 8, "y": 0 },
+          "targets": [{ "expr": "jarvis_admin_vms_running", "legendFormat": "" }],
+          "fieldConfig": {
+            "defaults": {
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "blue", "value": null },
+                  { "color": "green", "value": 1 }
+                ]
+              },
+              "unit": "short"
+            }
+          },
+          "options": { "colorMode": "background", "graphMode": "none", "textMode": "value" }
+        },
+        {
+          "id": 4,
+          "title": "Katalog-Apps",
+          "type": "stat",
+          "gridPos": { "h": 4, "w": 4, "x": 12, "y": 0 },
+          "targets": [{ "expr": "jarvis_admin_catalog_apps", "legendFormat": "" }],
+          "fieldConfig": {
+            "defaults": {
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "purple", "value": null },
+                  { "color": "green", "value": 1 }
+                ]
+              },
+              "unit": "short"
+            }
+          },
+          "options": { "colorMode": "background", "graphMode": "none", "textMode": "value" }
+        },
+        {
+          "id": 5,
+          "title": "Prometheus Targets",
+          "type": "stat",
+          "gridPos": { "h": 4, "w": 4, "x": 16, "y": 0 },
+          "targets": [{ "expr": "count(up == 1)", "legendFormat": "" }],
+          "fieldConfig": {
+            "defaults": {
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "red", "value": null },
+                  { "color": "green", "value": 1 }
+                ]
+              },
+              "unit": "short"
+            }
+          },
+          "options": { "colorMode": "background", "graphMode": "none", "textMode": "value" }
+        },
+        {
+          "id": 6,
+          "title": "Proxmox CPU %",
+          "type": "gauge",
+          "gridPos": { "h": 6, "w": 6, "x": 0, "y": 4 },
+          "targets": [{ "expr": "jarvis_admin_proxmox_cpu_percent", "legendFormat": "CPU" }],
+          "fieldConfig": {
+            "defaults": {
+              "min": 0, "max": 100, "unit": "percent",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "yellow", "value": 60 },
+                  { "color": "red", "value": 85 }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": 7,
+          "title": "Proxmox RAM",
+          "type": "gauge",
+          "gridPos": { "h": 6, "w": 6, "x": 6, "y": 4 },
+          "targets": [{
+            "expr": "jarvis_admin_proxmox_memory_bytes{type=\"used\"} / jarvis_admin_proxmox_memory_bytes{type=\"total\"} * 100",
+            "legendFormat": "RAM"
+          }],
+          "fieldConfig": {
+            "defaults": {
+              "min": 0, "max": 100, "unit": "percent",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "yellow", "value": 70 },
+                  { "color": "red", "value": 90 }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": 8,
+          "title": "Proxmox RAM absolut",
+          "type": "stat",
+          "gridPos": { "h": 6, "w": 6, "x": 12, "y": 4 },
+          "targets": [
+            { "expr": "jarvis_admin_proxmox_memory_bytes{type=\"used\"}", "legendFormat": "Belegt" },
+            { "expr": "jarvis_admin_proxmox_memory_bytes{type=\"total\"}", "legendFormat": "Gesamt" }
+          ],
+          "fieldConfig": {
+            "defaults": { "unit": "bytes" }
+          },
+          "options": { "colorMode": "value", "graphMode": "none", "textMode": "value_and_name" }
+        },
+        {
+          "id": 9,
+          "title": "Admin-Service HTTP Rate",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 10 },
+          "targets": [{
+            "expr": "sum(rate(jarvis_admin_http_requests_total[5m])) by (endpoint)",
+            "legendFormat": "{{endpoint}}"
+          }],
+          "fieldConfig": {
+            "defaults": { "unit": "reqps", "custom": { "fillOpacity": 20, "lineWidth": 2 } }
+          },
+          "options": { "legend": { "displayMode": "table", "placement": "right" } }
+        },
+        {
+          "id": 10,
+          "title": "Admin-Service Latenz (p95)",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 10 },
+          "targets": [{
+            "expr": "histogram_quantile(0.95, sum(rate(jarvis_admin_http_request_duration_seconds_bucket[5m])) by (endpoint, le))",
+            "legendFormat": "p95 {{endpoint}}"
+          }],
+          "fieldConfig": {
+            "defaults": { "unit": "s", "custom": { "fillOpacity": 10, "lineWidth": 2 } }
+          },
+          "options": { "legend": { "displayMode": "table", "placement": "right" } }
+        },
+        {
+          "id": 11,
+          "title": "Provisioning-Operationen",
+          "type": "timeseries",
+          "gridPos": { "h": 6, "w": 12, "x": 0, "y": 18 },
+          "targets": [{
+            "expr": "sum(increase(jarvis_admin_provisions_total[1h])) by (action, result)",
+            "legendFormat": "{{action}} / {{result}}"
+          }],
+          "fieldConfig": {
+            "defaults": { "unit": "short", "custom": { "fillOpacity": 30, "drawStyle": "bars" } }
+          }
+        },
+        {
+          "id": 12,
+          "title": "Scrape Targets Health",
+          "type": "table",
+          "gridPos": { "h": 6, "w": 12, "x": 12, "y": 18 },
+          "targets": [{
+            "expr": "up",
+            "legendFormat": "",
+            "format": "table",
+            "instant": true
+          }],
+          "transformations": [
+            { "id": "organize", "options": { "excludeByName": { "Time": true, "__name__": true }, "renameByName": { "job": "Job", "instance": "Instance", "Value": "Status" } } }
+          ],
+          "fieldConfig": {
+            "overrides": [
+              { "matcher": { "id": "byName", "options": "Status" }, "properties": [
+                { "id": "mappings", "value": [{ "type": "value", "options": { "0": { "text": "DOWN", "color": "red" }, "1": { "text": "UP", "color": "green" } } }] }
+              ]}
+            ]
+          }
+        }
+      ],
+      "schemaVersion": 39
+    }
+  proxmox-host.json: |
+    {
+      "uid": "jarvis-proxmox-host",
+      "title": "Proxmox Host (Admin-VM Node-Exporter)",
+      "tags": ["jarvis", "proxmox", "node-exporter"],
+      "timezone": "Europe/Berlin",
+      "editable": true,
+      "refresh": "30s",
+      "time": { "from": "now-1h", "to": "now" },
+      "panels": [
+        {
+          "id": 1,
+          "title": "CPU-Auslastung",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+          "targets": [{
+            "expr": "100 - (avg(rate(node_cpu_seconds_total{mode=\"idle\",job=\"admin-vm-node\"}[5m])) * 100)",
+            "legendFormat": "CPU %"
+          }],
+          "fieldConfig": {
+            "defaults": {
+              "min": 0, "max": 100, "unit": "percent",
+              "custom": { "fillOpacity": 20, "lineWidth": 2, "gradientMode": "scheme" },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "yellow", "value": 60 },
+                  { "color": "red", "value": 85 }
+                ]
+              },
+              "color": { "mode": "continuous-GrYlRd" }
+            }
+          }
+        },
+        {
+          "id": 2,
+          "title": "CPU pro Kern",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+          "targets": [{
+            "expr": "100 - (rate(node_cpu_seconds_total{mode=\"idle\",job=\"admin-vm-node\"}[5m]) * 100)",
+            "legendFormat": "CPU {{cpu}}"
+          }],
+          "fieldConfig": {
+            "defaults": { "min": 0, "max": 100, "unit": "percent", "custom": { "fillOpacity": 10, "lineWidth": 1 } }
+          }
+        },
+        {
+          "id": 3,
+          "title": "RAM-Nutzung",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+          "targets": [
+            { "expr": "node_memory_MemTotal_bytes{job=\"admin-vm-node\"}", "legendFormat": "Gesamt" },
+            { "expr": "node_memory_MemTotal_bytes{job=\"admin-vm-node\"} - node_memory_MemAvailable_bytes{job=\"admin-vm-node\"}", "legendFormat": "Belegt" },
+            { "expr": "node_memory_Cached_bytes{job=\"admin-vm-node\"}", "legendFormat": "Cache" },
+            { "expr": "node_memory_Buffers_bytes{job=\"admin-vm-node\"}", "legendFormat": "Buffer" }
+          ],
+          "fieldConfig": {
+            "defaults": { "unit": "bytes", "custom": { "fillOpacity": 20, "lineWidth": 2, "stacking": { "mode": "none" } } }
+          }
+        },
+        {
+          "id": 4,
+          "title": "RAM %",
+          "type": "gauge",
+          "gridPos": { "h": 8, "w": 4, "x": 12, "y": 8 },
+          "targets": [{
+            "expr": "(1 - node_memory_MemAvailable_bytes{job=\"admin-vm-node\"} / node_memory_MemTotal_bytes{job=\"admin-vm-node\"}) * 100",
+            "legendFormat": "RAM"
+          }],
+          "fieldConfig": {
+            "defaults": {
+              "min": 0, "max": 100, "unit": "percent",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "yellow", "value": 70 },
+                  { "color": "red", "value": 90 }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": 5,
+          "title": "Swap",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 8, "x": 16, "y": 8 },
+          "targets": [
+            { "expr": "node_memory_SwapTotal_bytes{job=\"admin-vm-node\"}", "legendFormat": "Swap Gesamt" },
+            { "expr": "node_memory_SwapTotal_bytes{job=\"admin-vm-node\"} - node_memory_SwapFree_bytes{job=\"admin-vm-node\"}", "legendFormat": "Swap Belegt" }
+          ],
+          "fieldConfig": {
+            "defaults": { "unit": "bytes", "custom": { "fillOpacity": 20 } }
+          }
+        },
+        {
+          "id": 6,
+          "title": "Disk I/O",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+          "targets": [
+            { "expr": "rate(node_disk_read_bytes_total{job=\"admin-vm-node\"}[5m])", "legendFormat": "Read {{device}}" },
+            { "expr": "rate(node_disk_written_bytes_total{job=\"admin-vm-node\"}[5m])", "legendFormat": "Write {{device}}" }
+          ],
+          "fieldConfig": {
+            "defaults": { "unit": "Bps", "custom": { "fillOpacity": 15, "lineWidth": 2 } }
+          }
+        },
+        {
+          "id": 7,
+          "title": "Disk-Belegung",
+          "type": "bargauge",
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+          "targets": [{
+            "expr": "100 - (node_filesystem_avail_bytes{job=\"admin-vm-node\",fstype!~\"tmpfs|overlay\"} / node_filesystem_size_bytes{job=\"admin-vm-node\",fstype!~\"tmpfs|overlay\"} * 100)",
+            "legendFormat": "{{mountpoint}}"
+          }],
+          "fieldConfig": {
+            "defaults": {
+              "min": 0, "max": 100, "unit": "percent",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "yellow", "value": 70 },
+                  { "color": "red", "value": 90 }
+                ]
+              }
+            }
+          },
+          "options": { "displayMode": "gradient", "orientation": "horizontal" }
+        },
+        {
+          "id": 8,
+          "title": "Netzwerk-Traffic",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 },
+          "targets": [
+            { "expr": "rate(node_network_receive_bytes_total{job=\"admin-vm-node\",device!~\"lo|veth.*|cni.*|flannel.*\"}[5m])", "legendFormat": "RX {{device}}" },
+            { "expr": "-rate(node_network_transmit_bytes_total{job=\"admin-vm-node\",device!~\"lo|veth.*|cni.*|flannel.*\"}[5m])", "legendFormat": "TX {{device}}" }
+          ],
+          "fieldConfig": {
+            "defaults": { "unit": "Bps", "custom": { "fillOpacity": 15, "lineWidth": 2 } }
+          }
+        },
+        {
+          "id": 9,
+          "title": "System-Last (Load Average)",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 24 },
+          "targets": [
+            { "expr": "node_load1{job=\"admin-vm-node\"}", "legendFormat": "1 min" },
+            { "expr": "node_load5{job=\"admin-vm-node\"}", "legendFormat": "5 min" },
+            { "expr": "node_load15{job=\"admin-vm-node\"}", "legendFormat": "15 min" },
+            { "expr": "count(node_cpu_seconds_total{mode=\"idle\",job=\"admin-vm-node\"})", "legendFormat": "CPU-Kerne" }
+          ],
+          "fieldConfig": {
+            "defaults": { "unit": "short", "custom": { "fillOpacity": 10, "lineWidth": 2 } }
+          }
+        },
+        {
+          "id": 10,
+          "title": "Uptime",
+          "type": "stat",
+          "gridPos": { "h": 4, "w": 6, "x": 0, "y": 32 },
+          "targets": [{ "expr": "time() - node_boot_time_seconds{job=\"admin-vm-node\"}", "legendFormat": "" }],
+          "fieldConfig": { "defaults": { "unit": "s" } },
+          "options": { "colorMode": "none", "graphMode": "none", "textMode": "value" }
+        },
+        {
+          "id": 11,
+          "title": "Open File Descriptors",
+          "type": "stat",
+          "gridPos": { "h": 4, "w": 6, "x": 6, "y": 32 },
+          "targets": [{ "expr": "node_filefd_allocated{job=\"admin-vm-node\"}", "legendFormat": "Offen" }],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "yellow", "value": 10000 },
+                  { "color": "red", "value": 50000 }
+                ]
+              }
+            }
+          },
+          "options": { "colorMode": "background", "graphMode": "area", "textMode": "value" }
+        }
+      ],
+      "schemaVersion": 39
+    }
+  admin-service.json: |
+    {
+      "uid": "jarvis-admin-service",
+      "title": "Admin-Service (LXC 160)",
+      "tags": ["jarvis", "admin-service"],
+      "timezone": "Europe/Berlin",
+      "editable": true,
+      "refresh": "30s",
+      "time": { "from": "now-1h", "to": "now" },
+      "panels": [
+        {
+          "id": 1,
+          "title": "Service Status",
+          "type": "stat",
+          "gridPos": { "h": 4, "w": 4, "x": 0, "y": 0 },
+          "targets": [{ "expr": "up{job=\"admin-service\"}", "legendFormat": "" }],
+          "fieldConfig": {
+            "defaults": {
+              "mappings": [
+                { "type": "value", "options": { "0": { "text": "DOWN", "color": "red" }, "1": { "text": "UP", "color": "green" } } }
+              ]
+            }
+          },
+          "options": { "colorMode": "background", "graphMode": "none", "textMode": "value" }
+        },
+        {
+          "id": 2,
+          "title": "HTTP Requests/s",
+          "type": "stat",
+          "gridPos": { "h": 4, "w": 4, "x": 4, "y": 0 },
+          "targets": [{ "expr": "sum(rate(jarvis_admin_http_requests_total[5m]))", "legendFormat": "" }],
+          "fieldConfig": { "defaults": { "unit": "reqps", "decimals": 2 } },
+          "options": { "colorMode": "value", "graphMode": "area", "textMode": "value" }
+        },
+        {
+          "id": 3,
+          "title": "User gesamt",
+          "type": "stat",
+          "gridPos": { "h": 4, "w": 4, "x": 8, "y": 0 },
+          "targets": [{ "expr": "jarvis_admin_users_total", "legendFormat": "" }],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "thresholds": { "steps": [{ "color": "blue", "value": null }, { "color": "green", "value": 1 }] }
+            }
+          },
+          "options": { "colorMode": "background", "graphMode": "none", "textMode": "value" }
+        },
+        {
+          "id": 4,
+          "title": "User aktiv",
+          "type": "stat",
+          "gridPos": { "h": 4, "w": 4, "x": 12, "y": 0 },
+          "targets": [{ "expr": "jarvis_admin_users_active", "legendFormat": "" }],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "thresholds": { "steps": [{ "color": "blue", "value": null }, { "color": "green", "value": 1 }] }
+            }
+          },
+          "options": { "colorMode": "background", "graphMode": "none", "textMode": "value" }
+        },
+        {
+          "id": 5,
+          "title": "VMs laufend",
+          "type": "stat",
+          "gridPos": { "h": 4, "w": 4, "x": 16, "y": 0 },
+          "targets": [{ "expr": "jarvis_admin_vms_running", "legendFormat": "" }],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "thresholds": { "steps": [{ "color": "blue", "value": null }, { "color": "green", "value": 1 }] }
+            }
+          },
+          "options": { "colorMode": "background", "graphMode": "none", "textMode": "value" }
+        },
+        {
+          "id": 6,
+          "title": "HTTP Requests nach Endpoint",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+          "targets": [{
+            "expr": "sum(rate(jarvis_admin_http_requests_total[5m])) by (endpoint)",
+            "legendFormat": "{{endpoint}}"
+          }],
+          "fieldConfig": {
+            "defaults": { "unit": "reqps", "custom": { "fillOpacity": 20, "lineWidth": 2, "stacking": { "mode": "normal" } } }
+          },
+          "options": { "legend": { "displayMode": "table", "placement": "right", "calcs": ["mean", "max"] } }
+        },
+        {
+          "id": 7,
+          "title": "Latenz-Verteilung (p50/p95/p99)",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+          "targets": [
+            { "expr": "histogram_quantile(0.50, sum(rate(jarvis_admin_http_request_duration_seconds_bucket[5m])) by (le))", "legendFormat": "p50" },
+            { "expr": "histogram_quantile(0.95, sum(rate(jarvis_admin_http_request_duration_seconds_bucket[5m])) by (le))", "legendFormat": "p95" },
+            { "expr": "histogram_quantile(0.99, sum(rate(jarvis_admin_http_request_duration_seconds_bucket[5m])) by (le))", "legendFormat": "p99" }
+          ],
+          "fieldConfig": {
+            "defaults": { "unit": "s", "custom": { "fillOpacity": 10, "lineWidth": 2 } }
+          }
+        },
+        {
+          "id": 8,
+          "title": "HTTP Fehler-Rate (4xx + 5xx)",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 12 },
+          "targets": [
+            { "expr": "sum(rate(jarvis_admin_http_requests_total{status=~\"4..\"}[5m]))", "legendFormat": "4xx" },
+            { "expr": "sum(rate(jarvis_admin_http_requests_total{status=~\"5..\"}[5m]))", "legendFormat": "5xx" }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "reqps",
+              "custom": { "fillOpacity": 30, "lineWidth": 2 },
+              "color": { "fixedColor": "red", "mode": "fixed" }
+            }
+          }
+        },
+        {
+          "id": 9,
+          "title": "Proxmox Host CPU (via Admin-Service)",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 6, "x": 12, "y": 12 },
+          "targets": [{ "expr": "jarvis_admin_proxmox_cpu_percent", "legendFormat": "CPU %" }],
+          "fieldConfig": {
+            "defaults": {
+              "min": 0, "max": 100, "unit": "percent",
+              "custom": { "fillOpacity": 20 },
+              "color": { "mode": "continuous-GrYlRd" }
+            }
+          }
+        },
+        {
+          "id": 10,
+          "title": "Proxmox Host RAM (via Admin-Service)",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 6, "x": 18, "y": 12 },
+          "targets": [
+            { "expr": "jarvis_admin_proxmox_memory_bytes{type=\"used\"}", "legendFormat": "Belegt" },
+            { "expr": "jarvis_admin_proxmox_memory_bytes{type=\"total\"}", "legendFormat": "Gesamt" }
+          ],
+          "fieldConfig": {
+            "defaults": { "unit": "bytes", "custom": { "fillOpacity": 15 } }
+          }
+        },
+        {
+          "id": 11,
+          "title": "Provisioning-Operationen (letzte 24h)",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 20 },
+          "targets": [{
+            "expr": "sum(increase(jarvis_admin_provisions_total[1h])) by (action, result)",
+            "legendFormat": "{{action}} / {{result}}"
+          }],
+          "fieldConfig": {
+            "defaults": { "unit": "short", "custom": { "fillOpacity": 30, "drawStyle": "bars" } }
+          }
+        },
+        {
+          "id": 12,
+          "title": "Katalog-Groesse",
+          "type": "stat",
+          "gridPos": { "h": 4, "w": 6, "x": 12, "y": 20 },
+          "targets": [{ "expr": "jarvis_admin_catalog_apps", "legendFormat": "" }],
+          "fieldConfig": { "defaults": { "unit": "short" } },
+          "options": { "colorMode": "value", "graphMode": "area", "textMode": "value" }
+        }
+      ],
+      "schemaVersion": 39
+    }

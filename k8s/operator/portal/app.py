@@ -25,6 +25,8 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
+from auth import get_current_user, setup_auth
+
 logger = logging.getLogger("jarvis-portal")
 
 # ---------------------------------------------------------------------------
@@ -132,6 +134,9 @@ BASE_DIR = Path(__file__).parent
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 
+# OIDC-Authentifizierung registrieren (Session-Middleware + Login-Routen)
+setup_auth(app)
+
 
 # ---------------------------------------------------------------------------
 # K8s API Helpers (lokaler k3s)
@@ -228,12 +233,15 @@ async def index(request: Request):
     """Startseite: App-Uebersicht + Ressourcen."""
     apps = _get_apps()
     catalog = _load_catalog()
+    auth_user = get_current_user(request)
+    display_name = auth_user["name"] if auth_user else VM_USERNAME
     return templates.TemplateResponse(request, "dashboard.html", {
         "apps": apps,
         "catalog": catalog,
-        "username": VM_USERNAME,
+        "username": display_name,
         "profile": VM_PROFILE,
         "mode": VM_MODE,
+        "auth_user": auth_user,
     })
 
 
@@ -242,11 +250,14 @@ async def app_store(request: Request):
     """App-Store: Verfuegbare Apps durchsuchen."""
     catalog = _load_catalog()
     installed = {a["spec"]["appId"] for a in _get_apps()}
+    auth_user = get_current_user(request)
+    display_name = auth_user["name"] if auth_user else VM_USERNAME
     return templates.TemplateResponse(request, "apps.html", {
         "catalog": catalog,
         "installed": installed,
-        "username": VM_USERNAME,
+        "username": display_name,
         "mode": VM_MODE,
+        "auth_user": auth_user,
     })
 
 
@@ -256,11 +267,14 @@ async def pod_logs_page(request: Request, pod_name: str):
         logs = _get_pod_logs(APPS_NAMESPACE, pod_name)
     except kubernetes.client.exceptions.ApiException as e:
         logs = f"Fehler: {e.reason}"
+    auth_user = get_current_user(request)
+    display_name = auth_user["name"] if auth_user else VM_USERNAME
     return templates.TemplateResponse(request, "logs.html", {
         "pod_name": pod_name,
         "logs": logs,
-        "username": VM_USERNAME,
+        "username": display_name,
         "mode": VM_MODE,
+        "auth_user": auth_user,
     })
 
 
@@ -322,10 +336,13 @@ if VM_MODE == "admin":
             users = []
             logger.warning("Admin-Service nicht erreichbar: %s", e)
 
+        auth_user = get_current_user(request)
+        display_name = auth_user["name"] if auth_user else VM_USERNAME
         return templates.TemplateResponse(request, "admin/users.html", {
             "users": users,
-            "username": VM_USERNAME,
+            "username": display_name,
             "mode": VM_MODE,
+            "auth_user": auth_user,
         })
 
     @app.get("/admin/users/{user_id}", response_class=HTMLResponse)
@@ -337,11 +354,14 @@ if VM_MODE == "admin":
         except Exception as e:
             raise HTTPException(404, f"User nicht gefunden: {e}")
 
+        auth_user = get_current_user(request)
+        display_name = auth_user["name"] if auth_user else VM_USERNAME
         return templates.TemplateResponse(request, "admin/user_detail.html", {
             "user": user,
             "stats": stats,
-            "username": VM_USERNAME,
+            "username": display_name,
             "mode": VM_MODE,
+            "auth_user": auth_user,
         })
 
     @app.get("/admin/capacity", response_class=HTMLResponse)
@@ -355,11 +375,14 @@ if VM_MODE == "admin":
             profiles = {}
             logger.warning("Admin-Service nicht erreichbar: %s", e)
 
+        auth_user = get_current_user(request)
+        display_name = auth_user["name"] if auth_user else VM_USERNAME
         return templates.TemplateResponse(request, "admin/capacity.html", {
             "capacity": capacity,
             "profiles": profiles,
-            "username": VM_USERNAME,
+            "username": display_name,
             "mode": VM_MODE,
+            "auth_user": auth_user,
         })
 
     @app.post("/admin/users/create")

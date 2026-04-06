@@ -201,8 +201,13 @@
             {% endif %}
         </div>
         <div class="nav-right">
-            <span class="user-badge">{{ username }}</span>
+            <span class="user-badge">
+                {% if auth_user %}{{ auth_user.name or auth_user.username }}{% else %}{{ username }}{% endif %}
+            </span>
             <span class="mode-badge {{ mode }}">{{ mode }}</span>
+            {% if auth_user %}
+            <a href="/auth/logout" class="btn btn-ghost btn-sm" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;">Logout</a>
+            {% endif %}
         </div>
     </nav>
     <div class="container">

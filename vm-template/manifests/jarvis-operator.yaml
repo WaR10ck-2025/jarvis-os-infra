@@ -1,4 +1,4 @@
-# jarvis-operator.yaml — Operator Deployment fuer k3s (hostPath-basiert)
+# jarvis-operator.yaml — Operator Deployment fuer k3s (ghcr.io Image)
 # Wird automatisch von k3s angewendet wenn in /var/lib/rancher/k3s/server/manifests/
 ---
 apiVersion: v1
@@ -83,24 +83,16 @@ spec:
         app.kubernetes.io/part-of: jarvis-os
     spec:
       serviceAccountName: jarvis-operator
-      initContainers:
-        - name: install-deps
-          image: python:3.12-slim
-          command: ["/bin/sh", "-c"]
-          args:
-            - pip install --no-cache-dir --target=/deps -r /app/requirements.txt
-          volumeMounts:
-            - name: deps
-              mountPath: /deps
-            - name: operator-code
-              mountPath: /app
-              readOnly: true
       containers:
         - name: operator
-          image: python:3.12-slim
+          image: ghcr.io/war10ck-2025/jarvis-operator:latest
+          imagePullPolicy: Always
+          command: ["kopf", "run", "operator.py", "--verbose", "--liveness=http://0.0.0.0:8080/healthz", "--standalone"]
           env:
-            - name: PYTHONPATH
-              value: /deps
+            - name: USER
+              value: "jarvis"
+            - name: HOME
+              value: "/tmp"
             - name: ADMIN_SERVICE_URL
               valueFrom:
                 configMapKeyRef:
@@ -120,7 +112,6 @@ spec:
               value: /opt/jarvis/catalog.json
             - name: APPS_NAMESPACE
               value: default
-          command: ["python", "-m", "kopf", "run", "/app/operator.py", "--verbose", "--liveness=http://0.0.0.0:8080/healthz"]
           ports:
             - containerPort: 8080
               name: health
@@ -138,22 +129,10 @@ spec:
               memory: "256Mi"
               cpu: "500m"
           volumeMounts:
-            - name: deps
-              mountPath: /deps
-              readOnly: true
-            - name: operator-code
-              mountPath: /app
-              readOnly: true
             - name: jarvis-data
               mountPath: /opt/jarvis
       volumes:
-        - name: deps
-          emptyDir: {}
-        - name: operator-code
-          hostPath:
-            path: /opt/jarvis/operator
-            type: Directory
         - name: jarvis-data
           hostPath:
             path: /opt/jarvis
-            type: Directory
+            type: DirectoryOrCreate
