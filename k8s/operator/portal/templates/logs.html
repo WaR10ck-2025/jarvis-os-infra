@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}Logs: {{ pod_name }} — J.A.R.V.I.S-OS{% endblock %}
+
+{% block content %}
+<div class="section">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+        <h1 style="font-size: 1.25rem; font-family: monospace;">{{ pod_name }}</h1>
+        <a href="/" class="btn btn-ghost btn-sm">Zurueck zum Dashboard</a>
+    </div>
+    <pre class="logs">{{ logs }}</pre>
+</div>
+{% endblock %}

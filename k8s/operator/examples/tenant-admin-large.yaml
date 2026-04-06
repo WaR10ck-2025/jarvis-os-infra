@@ -1,9 +1,10 @@
 apiVersion: jarvis-os.io/v1
 kind: JarvisTenant
 metadata:
-  name: alice
+  name: admin
 spec:
-  username: alice
-  profile: medium
+  username: admin
+  profile: large
+  appSlotLimit: 15
   tailscaleEnabled: true
   dashboardEnabled: true

@@ -1,17 +1,39 @@
 """
-J.A.R.V.I.S-OS Kubernetes Operator
+J.A.R.V.I.S-OS Kubernetes Operator (Per-VM Version)
 
-Reconciles JarvisTenant and JarvisApp custom resources.
-- JarvisTenant: Creates isolated namespace with quotas + network policies
-- JarvisApp: Deploys containerized apps into tenant namespaces
+Laeuft in jeder User-VM (und Admin-VM) als lokaler Operator.
+Reconciled JarvisApp Custom Resources — deployed Apps als Container oder Helm Charts.
+
+Aenderungen gegenueber Shared-K8s-Version:
+  - JarvisTenant ENTFERNT (VMs ersetzen Namespaces, Proxmox verwaltet User)
+  - Hardware-Profile ENTFERNT (Profile sind jetzt Proxmox-VM-Sizing im Admin-Service)
+  - Kapazitaetspruefung ENTFERNT (VM-Limits durch Proxmox enforced)
+  - Katalog-Sync NEU (laedt App-Katalog periodisch vom Admin-Service)
+  - Status-Report NEU (meldet App-Status + Ressourcen an Admin-Service)
 """
 
 import datetime
+import json
+import os
 import kopf
 import kubernetes
 import logging
+import subprocess
+import tempfile
+import yaml
 
 logger = logging.getLogger("jarvis-operator")
+
+# ---------------------------------------------------------------------------
+# Konfiguration (aus Umgebungsvariablen / ConfigMap)
+# ---------------------------------------------------------------------------
+
+ADMIN_SERVICE_URL = os.getenv("ADMIN_SERVICE_URL", "http://192.168.10.160:8300")
+VM_USERNAME = os.getenv("VM_USERNAME", "unknown")
+VM_MODE = os.getenv("VM_MODE", "user")  # "user" oder "admin"
+CATALOG_PATH = os.getenv("CATALOG_PATH", "/opt/jarvis/catalog.json")
+APPS_NAMESPACE = os.getenv("APPS_NAMESPACE", "default")  # Apps landen hier
+
 
 # ---------------------------------------------------------------------------
 # Startup
@@ -21,189 +43,77 @@ logger = logging.getLogger("jarvis-operator")
 def configure(settings: kopf.OperatorSettings, **_):
     settings.posting.level = logging.WARNING
     settings.persistence.finalizer = "jarvis-os.io/finalizer"
-    # Reconcile every 5 minutes to catch drift
     settings.persistence.progress_storage = kopf.AnnotationsProgressStorage(
         prefix="jarvis-os.io"
     )
-    logger.info("J.A.R.V.I.S-OS Operator gestartet")
+    # K8s-Client initialisieren
+    try:
+        kubernetes.config.load_incluster_config()
+    except kubernetes.config.ConfigException:
+        kubeconfig = os.environ.get("KUBECONFIG", os.path.expanduser("~/.kube/config"))
+        kubernetes.config.load_kube_config(config_file=kubeconfig)
 
-
-# ---------------------------------------------------------------------------
-# JarvisTenant — Create
-# ---------------------------------------------------------------------------
-
-@kopf.on.create("jarvis-os.io", "v1", "jarvistenants")
-def tenant_create(spec, name, patch, **_):
-    username = spec["username"]
-    ns_name = f"user-{username}"
-
-    logger.info(f"Erstelle Tenant '{username}' -> Namespace '{ns_name}'")
-
-    api = kubernetes.client.CoreV1Api()
-
-    # 1. Namespace erstellen
-    ns = kubernetes.client.V1Namespace(
-        metadata=kubernetes.client.V1ObjectMeta(
-            name=ns_name,
-            labels={
-                "app.kubernetes.io/managed-by": "jarvis-operator",
-                "jarvis-os.io/tenant": username,
-                "app.kubernetes.io/part-of": "jarvis-os",
-            },
-        )
+    logger.info(
+        "J.A.R.V.I.S-OS Operator gestartet — User: %s, Modus: %s, Admin-Service: %s",
+        VM_USERNAME, VM_MODE, ADMIN_SERVICE_URL,
     )
-    try:
-        api.create_namespace(ns)
-        logger.info(f"Namespace '{ns_name}' erstellt")
-    except kubernetes.client.exceptions.ApiException as e:
-        if e.status == 409:
-            logger.info(f"Namespace '{ns_name}' existiert bereits")
-        else:
-            raise
-
-    # 2. ResourceQuota
-    storage_quota = spec.get("storageQuota", "50Gi")
-    cpu_limit = spec.get("cpuLimit", "4")
-    memory_limit = spec.get("memoryLimit", "8Gi")
-    app_slot_limit = spec.get("appSlotLimit", 10)
-
-    quota = kubernetes.client.V1ResourceQuota(
-        metadata=kubernetes.client.V1ObjectMeta(
-            name="tenant-quota",
-            namespace=ns_name,
-            labels={"jarvis-os.io/tenant": username},
-        ),
-        spec=kubernetes.client.V1ResourceQuotaSpec(
-            hard={
-                "requests.storage": storage_quota,
-                "limits.cpu": cpu_limit,
-                "limits.memory": memory_limit,
-                "pods": str(app_slot_limit * 2),  # 2 Pods pro App (rolling update)
-                "services": str(app_slot_limit),
-                "persistentvolumeclaims": str(app_slot_limit),
-            }
-        ),
-    )
-    _apply_resource(api.create_namespaced_resource_quota, ns_name, quota)
-
-    # 3. Default NetworkPolicy — isoliert den Namespace
-    net_api = kubernetes.client.NetworkingV1Api()
-    netpol = {
-        "apiVersion": "networking.k8s.io/v1",
-        "kind": "NetworkPolicy",
-        "metadata": {
-            "name": "tenant-isolation",
-            "namespace": ns_name,
-            "labels": {"jarvis-os.io/tenant": username},
-        },
-        "spec": {
-            "podSelector": {},  # Gilt fuer alle Pods im Namespace
-            "policyTypes": ["Ingress", "Egress"],
-            "ingress": [
-                {
-                    # Erlaube Traffic aus dem eigenen Namespace
-                    "from": [{"namespaceSelector": {"matchLabels": {"jarvis-os.io/tenant": username}}}]
-                },
-                {
-                    # Erlaube Ingress-Controller Traffic
-                    "from": [{"namespaceSelector": {"matchLabels": {"app.kubernetes.io/name": "ingress-nginx"}}}]
-                },
-            ],
-            "egress": [
-                {
-                    # DNS erlauben (kube-system)
-                    "to": [{"namespaceSelector": {"matchLabels": {"kubernetes.io/metadata.name": "kube-system"}}}],
-                    "ports": [{"protocol": "UDP", "port": 53}, {"protocol": "TCP", "port": 53}],
-                },
-                {
-                    # Egress ins Internet erlauben (aber nicht zu anderen Tenants)
-                    "to": [{"ipBlock": {"cidr": "0.0.0.0/0", "except": ["10.0.0.0/8"]}}],
-                },
-            ],
-        },
-    }
-    custom_api = kubernetes.client.CustomObjectsApi()
-    try:
-        net_api.create_namespaced_network_policy(ns_name, netpol)
-    except kubernetes.client.exceptions.ApiException as e:
-        if e.status != 409:
-            raise
-
-    # 4. Status updaten
-    now = datetime.datetime.now(datetime.timezone.utc).isoformat()
-    patch.status["phase"] = "Ready"
-    patch.status["namespace"] = ns_name
-    patch.status["appCount"] = 0
-    patch.status["message"] = "Tenant bereit"
-    patch.status["lastUpdated"] = now
-
-    logger.info(f"Tenant '{username}' ist Ready")
-    return {"message": f"Namespace {ns_name} erstellt mit Quota und NetworkPolicy"}
 
 
 # ---------------------------------------------------------------------------
-# JarvisTenant — Delete
+# Katalog-Sync (Periodisch vom Admin-Service laden)
 # ---------------------------------------------------------------------------
 
-@kopf.on.delete("jarvis-os.io", "v1", "jarvistenants")
-def tenant_delete(spec, name, **_):
-    username = spec["username"]
-    ns_name = f"user-{username}"
-
-    logger.info(f"Loesche Tenant '{username}' -> Namespace '{ns_name}'")
-
-    api = kubernetes.client.CoreV1Api()
+@kopf.timer("jarvis-os.io", "v1", "jarvisapps", interval=3600, initial_delay=30, idle=3600)
+def catalog_sync(**_):
+    """Synchronisiert den App-Katalog vom Admin-Service (stuendlich)."""
+    import urllib.request
     try:
-        api.delete_namespace(ns_name)
-        logger.info(f"Namespace '{ns_name}' geloescht")
-    except kubernetes.client.exceptions.ApiException as e:
-        if e.status == 404:
-            logger.info(f"Namespace '{ns_name}' existiert nicht mehr")
-        else:
-            raise
+        url = f"{ADMIN_SERVICE_URL}/api/v1/catalog"
+        req = urllib.request.Request(url, method="GET")
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            data = json.loads(resp.read().decode())
+        with open(CATALOG_PATH, "w") as f:
+            json.dump(data, f, indent=2)
+        logger.info("Katalog synchronisiert: %d Apps", len(data))
+    except Exception as e:
+        logger.warning("Katalog-Sync fehlgeschlagen: %s", e)
 
 
 # ---------------------------------------------------------------------------
-# JarvisTenant — Update (Quota-Aenderungen)
+# Status-Report (Periodisch an Admin-Service melden)
 # ---------------------------------------------------------------------------
 
-@kopf.on.update("jarvis-os.io", "v1", "jarvistenants", field="spec")
-def tenant_update(spec, name, patch, **_):
-    username = spec["username"]
-    ns_name = f"user-{username}"
-
-    logger.info(f"Update Tenant '{username}' Quotas")
-
-    api = kubernetes.client.CoreV1Api()
-    storage_quota = spec.get("storageQuota", "50Gi")
-    cpu_limit = spec.get("cpuLimit", "4")
-    memory_limit = spec.get("memoryLimit", "8Gi")
-    app_slot_limit = spec.get("appSlotLimit", 10)
-
-    quota_patch = {
-        "spec": {
-            "hard": {
-                "requests.storage": storage_quota,
-                "limits.cpu": cpu_limit,
-                "limits.memory": memory_limit,
-                "pods": str(app_slot_limit * 2),
-                "services": str(app_slot_limit),
-                "persistentvolumeclaims": str(app_slot_limit),
-            }
-        }
-    }
+@kopf.timer("jarvis-os.io", "v1", "jarvisapps", interval=300, initial_delay=60, idle=300)
+def status_report(**_):
+    """Meldet App-Status + Ressourcennutzung an den Admin-Service."""
+    import urllib.request
     try:
-        api.patch_namespaced_resource_quota("tenant-quota", ns_name, quota_patch)
-    except kubernetes.client.exceptions.ApiException as e:
-        if e.status == 404:
-            logger.warning(f"Quota fuer '{ns_name}' nicht gefunden, erstelle neu")
-            tenant_create(spec=spec, name=name, patch=patch)
-            return
-        raise
+        # Aktuelle Apps zaehlen
+        custom_api = kubernetes.client.CustomObjectsApi()
+        try:
+            apps = custom_api.list_namespaced_custom_object(
+                "jarvis-os.io", "v1", APPS_NAMESPACE, "jarvisapps"
+            )
+            app_count = len(apps.get("items", []))
+            app_names = [a["spec"]["appId"] for a in apps.get("items", [])]
+        except kubernetes.client.exceptions.ApiException:
+            app_count = 0
+            app_names = []
 
-    now = datetime.datetime.now(datetime.timezone.utc).isoformat()
-    patch.status["message"] = "Quotas aktualisiert"
-    patch.status["lastUpdated"] = now
+        payload = json.dumps({
+            "username": VM_USERNAME,
+            "app_count": app_count,
+            "apps": app_names,
+            "mode": VM_MODE,
+        }).encode()
+
+        url = f"{ADMIN_SERVICE_URL}/api/v1/users/{VM_USERNAME}/heartbeat"
+        req = urllib.request.Request(url, data=payload, method="POST",
+                                     headers={"Content-Type": "application/json"})
+        urllib.request.urlopen(req, timeout=10)
+        logger.debug("Status-Report gesendet: %d Apps", app_count)
+    except Exception as e:
+        logger.debug("Status-Report fehlgeschlagen (nicht kritisch): %s", e)
 
 
 # ---------------------------------------------------------------------------
@@ -213,39 +123,20 @@ def tenant_update(spec, name, patch, **_):
 @kopf.on.create("jarvis-os.io", "v1", "jarvisapps")
 def app_create(spec, name, namespace, patch, **_):
     app_id = spec["appId"]
-    logger.info(f"Deploye App '{app_id}' in Namespace '{namespace}'")
-
-    # Pruefen ob der Namespace ein Tenant-Namespace ist
-    api = kubernetes.client.CoreV1Api()
-    try:
-        ns = api.read_namespace(namespace)
-    except kubernetes.client.exceptions.ApiException:
-        patch.status["phase"] = "Error"
-        patch.status["message"] = f"Namespace '{namespace}' nicht gefunden"
-        return
-
-    tenant = ns.metadata.labels.get("jarvis-os.io/tenant") if ns.metadata.labels else None
-    if not tenant:
-        logger.warning(f"Namespace '{namespace}' ist kein Tenant-Namespace")
+    logger.info("Deploye App '%s' in Namespace '%s'", app_id, namespace)
 
     image = spec.get("image")
     helm_chart = spec.get("helmChart")
     port = spec.get("port", 8080)
 
     if image:
-        # Direktes Deployment (ohne Helm)
         _deploy_container(namespace, name, app_id, image, port, spec, patch)
     elif helm_chart:
-        # Helm-basiertes Deployment (Platzhalter)
-        patch.status["phase"] = "Pending"
-        patch.status["message"] = f"Helm-Deployment fuer '{helm_chart}' noch nicht implementiert"
-        logger.info(f"Helm-Deployment fuer '{app_id}' ist ein TODO")
+        _deploy_helm(namespace, name, app_id, helm_chart, spec, patch)
     else:
         patch.status["phase"] = "Error"
         patch.status["message"] = "Entweder 'image' oder 'helmChart' muss angegeben werden"
         return
-
-    _update_tenant_app_count(namespace)
 
 
 # ---------------------------------------------------------------------------
@@ -255,27 +146,26 @@ def app_create(spec, name, namespace, patch, **_):
 @kopf.on.delete("jarvis-os.io", "v1", "jarvisapps")
 def app_delete(spec, name, namespace, **_):
     app_id = spec["appId"]
-    logger.info(f"Loesche App '{app_id}' aus Namespace '{namespace}'")
+    helm_chart = spec.get("helmChart")
+    logger.info("Loesche App '%s' aus Namespace '%s'", app_id, namespace)
 
-    apps_api = kubernetes.client.AppsV1Api()
-    api = kubernetes.client.CoreV1Api()
-    net_api = kubernetes.client.NetworkingV1Api()
+    if helm_chart:
+        _uninstall_helm(namespace, name, app_id)
+    else:
+        apps_api = kubernetes.client.AppsV1Api()
+        api = kubernetes.client.CoreV1Api()
+        net_api = kubernetes.client.NetworkingV1Api()
 
-    # Deployment loeschen
-    _safe_delete(lambda: apps_api.delete_namespaced_deployment(name, namespace))
-    # Service loeschen
-    _safe_delete(lambda: api.delete_namespaced_service(name, namespace))
-    # Ingress loeschen
-    _safe_delete(lambda: net_api.delete_namespaced_ingress(name, namespace))
-    # PVC loeschen (wenn vorhanden)
-    _safe_delete(lambda: api.delete_namespaced_persistent_volume_claim(f"{name}-data", namespace))
+        _safe_delete(lambda: apps_api.delete_namespaced_deployment(name, namespace))
+        _safe_delete(lambda: api.delete_namespaced_service(name, namespace))
+        _safe_delete(lambda: net_api.delete_namespaced_ingress(name, namespace))
+        _safe_delete(lambda: api.delete_namespaced_persistent_volume_claim(f"{name}-data", namespace))
 
-    _update_tenant_app_count(namespace)
-    logger.info(f"App '{app_id}' aus '{namespace}' entfernt")
+    logger.info("App '%s' aus '%s' entfernt", app_id, namespace)
 
 
 # ---------------------------------------------------------------------------
-# Helpers
+# Container-Deployment
 # ---------------------------------------------------------------------------
 
 def _deploy_container(namespace, name, app_id, image, port, spec, patch):
@@ -315,7 +205,6 @@ def _deploy_container(namespace, name, app_id, image, port, spec, patch):
         mount_path = persistence.get("mountPath", "/data")
         size = persistence.get("size", "5Gi")
 
-        # PVC erstellen
         pvc = kubernetes.client.V1PersistentVolumeClaim(
             metadata=kubernetes.client.V1ObjectMeta(
                 name=pvc_name, namespace=namespace, labels=labels
@@ -426,7 +315,6 @@ def _deploy_container(namespace, name, app_id, image, port, spec, patch):
         except kubernetes.client.exceptions.ApiException as e:
             if e.status != 409:
                 raise
-
         endpoint = f"http://{host}"
     else:
         endpoint = f"{name}.{namespace}.svc.cluster.local:{port}"
@@ -437,7 +325,140 @@ def _deploy_container(namespace, name, app_id, image, port, spec, patch):
     patch.status["message"] = f"App '{app_id}' deployed"
     patch.status["lastUpdated"] = now
 
-    logger.info(f"App '{app_id}' laeuft unter {endpoint}")
+    logger.info("App '%s' laeuft unter %s", app_id, endpoint)
+
+
+# ---------------------------------------------------------------------------
+# Helm-Deployment
+# ---------------------------------------------------------------------------
+
+def _deploy_helm(namespace, name, app_id, helm_chart, spec, patch):
+    """Installiert eine App via Helm Chart."""
+    helm_repo = spec.get("helmRepo")
+    helm_values = spec.get("helmValues", {})
+    port = spec.get("port", 8080)
+
+    patch.status["phase"] = "Deploying"
+    patch.status["message"] = f"Helm install '{helm_chart}'..."
+
+    if helm_repo:
+        repo_name = helm_chart.split("/")[0] if "/" in helm_chart else app_id.lower()
+        result = _helm_cmd(["repo", "add", repo_name, helm_repo, "--force-update"])
+        if result.returncode != 0:
+            logger.warning("Helm repo add: %s", result.stderr)
+        _helm_cmd(["repo", "update"])
+
+    values_file = None
+    if helm_values:
+        values_file = tempfile.NamedTemporaryFile(
+            mode="w", suffix=".yaml", delete=False, prefix="jarvis-helm-"
+        )
+        yaml.dump(helm_values, values_file, default_flow_style=False)
+        values_file.close()
+
+    cmd = [
+        "upgrade", "--install", name, helm_chart,
+        "--namespace", namespace,
+        "--wait", "--timeout", "5m",
+    ]
+    if values_file:
+        cmd.extend(["--values", values_file.name])
+
+    result = _helm_cmd(cmd)
+
+    if values_file:
+        os.unlink(values_file.name)
+
+    if result.returncode != 0:
+        error_msg = result.stderr.strip()[-200:]
+        patch.status["phase"] = "Error"
+        patch.status["message"] = f"Helm install fehlgeschlagen: {error_msg}"
+        logger.error("Helm install '%s' failed: %s", app_id, result.stderr)
+        return
+
+    ingress_spec = spec.get("ingress", {})
+    endpoint = f"{name}.{namespace}.svc.cluster.local:{port}"
+    if ingress_spec.get("enabled", False):
+        host = ingress_spec.get(
+            "host", f"{app_id.lower()}.{namespace}.k8s.jarvis.local"
+        )
+        net_api = kubernetes.client.NetworkingV1Api()
+        labels = {
+            "app": name,
+            "app.kubernetes.io/managed-by": "jarvis-operator",
+            "app.kubernetes.io/part-of": "jarvis-os",
+        }
+        ingress = {
+            "apiVersion": "networking.k8s.io/v1",
+            "kind": "Ingress",
+            "metadata": {"name": f"{name}-jarvis", "namespace": namespace, "labels": labels},
+            "spec": {
+                "ingressClassName": "nginx",
+                "rules": [
+                    {
+                        "host": host,
+                        "http": {
+                            "paths": [
+                                {
+                                    "path": "/",
+                                    "pathType": "Prefix",
+                                    "backend": {
+                                        "service": {
+                                            "name": name,
+                                            "port": {"number": port},
+                                        }
+                                    },
+                                }
+                            ]
+                        },
+                    }
+                ],
+            },
+        }
+        try:
+            net_api.create_namespaced_ingress(namespace, ingress)
+        except kubernetes.client.exceptions.ApiException as e:
+            if e.status != 409:
+                raise
+        endpoint = f"http://{host}"
+
+    now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    patch.status["phase"] = "Running"
+    patch.status["endpoint"] = endpoint
+    patch.status["message"] = f"Helm release '{name}' deployed"
+    patch.status["lastUpdated"] = now
+
+    logger.info("Helm App '%s' deployed: %s", app_id, endpoint)
+
+
+def _uninstall_helm(namespace, name, app_id):
+    """Deinstalliert ein Helm-Release."""
+    result = _helm_cmd(["uninstall", name, "--namespace", namespace])
+    if result.returncode != 0:
+        logger.warning("Helm uninstall '%s': %s", name, result.stderr)
+    else:
+        logger.info("Helm release '%s' deinstalliert", name)
+
+    net_api = kubernetes.client.NetworkingV1Api()
+    _safe_delete(lambda: net_api.delete_namespaced_ingress(f"{name}-jarvis", namespace))
+
+
+# ---------------------------------------------------------------------------
+# Utility
+# ---------------------------------------------------------------------------
+
+def _helm_cmd(args):
+    """Fuehrt ein Helm-Kommando aus."""
+    cmd = ["helm"] + args
+    logger.debug("Helm: %s", " ".join(cmd))
+    return subprocess.run(
+        cmd, capture_output=True, text=True, timeout=600,
+        env={
+            "KUBECONFIG": "/etc/rancher/k3s/k3s.yaml",
+            "HOME": "/root",
+            "PATH": "/usr/local/bin:/usr/bin:/bin",
+        },
+    )
 
 
 def _apply_resource(create_fn, namespace, resource):
@@ -456,33 +477,3 @@ def _safe_delete(delete_fn):
     except kubernetes.client.exceptions.ApiException as e:
         if e.status != 404:
             raise
-
-
-def _update_tenant_app_count(namespace):
-    """Zaehlt JarvisApps im Namespace und aktualisiert den Tenant-Status."""
-    custom_api = kubernetes.client.CustomObjectsApi()
-    try:
-        apps = custom_api.list_namespaced_custom_object(
-            "jarvis-os.io", "v1", namespace, "jarvisapps"
-        )
-        count = len(apps.get("items", []))
-    except kubernetes.client.exceptions.ApiException:
-        return
-
-    # Tenant finden (Cluster-scoped, suche nach Namespace-Label)
-    try:
-        tenants = custom_api.list_cluster_custom_object(
-            "jarvis-os.io", "v1", "jarvistenants"
-        )
-        for tenant in tenants.get("items", []):
-            if tenant.get("status", {}).get("namespace") == namespace:
-                custom_api.patch_cluster_custom_object_status(
-                    "jarvis-os.io",
-                    "v1",
-                    "jarvistenants",
-                    tenant["metadata"]["name"],
-                    {"status": {"appCount": count}},
-                )
-                break
-    except kubernetes.client.exceptions.ApiException:
-        pass

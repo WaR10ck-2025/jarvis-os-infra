@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+{% block title %}User-Verwaltung — J.A.R.V.I.S-OS Admin{% endblock %}
+{% block nav_admin_users %}active{% endblock %}
+
+{% block content %}
+
+<div class="section">
+    <h1>User-Verwaltung</h1>
+    <p class="subtitle">Alle User und ihre VMs verwalten</p>
+</div>
+
+{# --- User erstellen --- #}
+<div class="section">
+    <h2>Neuen User erstellen</h2>
+    <div class="card">
+        <form method="post" action="/admin/users/create" style="display: flex; gap: 1rem; align-items: flex-end; flex-wrap: wrap;">
+            <div style="flex: 1; min-width: 200px;">
+                <label class="stat-label" for="username" style="display: block; margin-bottom: 0.4rem;">Username</label>
+                <input type="text" name="username" id="username" required
+                    pattern="^[a-z][a-z0-9-]{1,30}[a-z0-9]$"
+                    placeholder="z.B. alice, bob"
+                    style="width: 100%;">
+            </div>
+            <div style="min-width: 180px;">
+                <label class="stat-label" for="profile" style="display: block; margin-bottom: 0.4rem;">Profil</label>
+                <select name="profile" id="profile" style="width: 100%; cursor: pointer;">
+                    <option value="small">Small — 1 Core, 1 GB RAM</option>
+                    <option value="medium" selected>Medium — 2 Cores, 2 GB RAM</option>
+                    <option value="large">Large — 4 Cores, 4 GB RAM</option>
+                </select>
+            </div>
+            <button type="submit" class="btn btn-primary">User erstellen</button>
+        </form>
+    </div>
+</div>
+
+{# --- User-Liste --- #}
+<div class="section">
+    <h2>Users ({{ users | length }})</h2>
+    {% if users %}
+    <div class="grid grid-3">
+        {% for user in users %}
+        {% set u_status = user.status | default('unknown') %}
+        <div class="card" style="position: relative;">
+            <a href="/admin/users/{{ user.user_id }}" style="text-decoration: none; color: inherit; display: block;">
+                <div class="card-header">
+                    <span class="card-title">{{ user.username }}</span>
+                    <div style="display: flex; gap: 0.4rem; align-items: center;">
+                        <span class="badge badge-info">{{ user.profile | default('medium') }}</span>
+                        {% if u_status == 'ready' %}
+                        <span class="badge badge-success">Ready</span>
+                        {% elif u_status == 'provisioning' %}
+                        <span class="badge badge-warning">Provisioning</span>
+                        {% elif u_status == 'error' %}
+                        <span class="badge badge-danger">Error</span>
+                        {% elif u_status == 'stopped' %}
+                        <span class="badge badge-warning">Stopped</span>
+                        {% elif u_status == 'deleting' %}
+                        <span class="badge badge-danger">Deleting...</span>
+                        {% else %}
+                        <span class="badge badge-warning">{{ u_status }}</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div style="display: flex; gap: 1.5rem;">
+                    <div class="stat">
+                        <div class="stat-label">VM-ID</div>
+                        <div class="stat-value">{{ user.vm_id | default('-') }}</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-label">VM-IP</div>
+                        <div class="stat-value" style="font-size: 0.9rem;">{{ user.vm_ip | default('-') }}</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-label">Bridge</div>
+                        <div class="stat-value" style="font-size: 0.9rem;">{{ user.bridge | default('-') }}</div>
+                    </div>
+                </div>
+                {% if user.provisioning_step and u_status == 'provisioning' %}
+                <div style="margin-top: 0.5rem; color: var(--warning); font-size: 0.8rem;">
+                    Schritt: {{ user.provisioning_step }}
+                </div>
+                {% endif %}
+                {% if user.portal_url %}
+                <div style="margin-top: 0.5rem; font-size: 0.8rem;">
+                    <a href="{{ user.portal_url }}" target="_blank" style="color: var(--accent);">Portal oeffnen</a>
+                </div>
+                {% endif %}
+            </a>
+            {% if u_status not in ['provisioning', 'deleting'] %}
+            <form method="post" action="/admin/users/delete/{{ user.user_id }}" style="position: absolute; top: 1rem; right: 1rem;"
+                  onsubmit="return showConfirm(event, '{{ user.username }}', this);">
+                <button type="submit" class="btn btn-ghost btn-sm" style="padding: 0.2rem 0.5rem; font-size: 0.7rem; color: var(--danger);"
+                        title="User + VM loeschen">&#10005;</button>
+            </form>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty">
+        <p>Keine User vorhanden</p>
+        <p style="font-size: 0.875rem; margin-top: 0.5rem;">Erstelle oben deinen ersten User</p>
+    </div>
+    {% endif %}
+</div>
+
+{# --- Confirm Dialog --- #}
+<div id="confirmDialog" class="confirm-dialog">
+    <div class="confirm-box">
+        <h3>User loeschen?</h3>
+        <p id="confirmText">Bist du sicher?</p>
+        <div class="confirm-actions">
+            <button class="btn btn-ghost btn-sm" onclick="hideConfirm()">Abbrechen</button>
+            <button class="btn btn-danger btn-sm" onclick="doDelete()">Loeschen</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let pendingForm = null;
+function showConfirm(event, name, form) {
+    event.preventDefault();
+    pendingForm = form;
+    document.getElementById('confirmText').textContent =
+        `User "${name}" und die zugehoerige VM werden unwiderruflich geloescht.`;
+    document.getElementById('confirmDialog').classList.add('active');
+    return false;
+}
+function hideConfirm() {
+    document.getElementById('confirmDialog').classList.remove('active');
+    pendingForm = null;
+}
+function doDelete() {
+    if (pendingForm) pendingForm.submit();
+}
+</script>
+{% endblock %}

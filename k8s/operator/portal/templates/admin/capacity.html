@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+{% block title %}Kapazitaet — J.A.R.V.I.S-OS Admin{% endblock %}
+{% block nav_admin_capacity %}active{% endblock %}
+
+{% block content %}
+
+<div class="section">
+    <h1>Cluster-Kapazitaet</h1>
+    <p class="subtitle">Proxmox-Host Ressourcen-Uebersicht</p>
+</div>
+
+{# --- Ressourcen-Balken --- #}
+<div class="section">
+    <h2>Auslastung</h2>
+    {% if capacity %}
+    <div class="quota-grid">
+        <div class="card" style="padding: 0.75rem 1rem;">
+            <div class="stat-label">RAM belegt</div>
+            <div class="stat-value">
+                {{ "%.1f"|format(capacity.used_memory_gb | default(0)) }} GB
+                <span style="color: var(--text-muted); font-weight: 400;">
+                    / {{ "%.1f"|format(capacity.total_memory_gb | default(0)) }} GB
+                </span>
+            </div>
+            <div class="progress-bar" style="margin-top: 0.5rem;">
+                {% set mem_pct = capacity.memory_percent | default(0) %}
+                <div class="progress-fill" style="width: {{ mem_pct }}%;
+                    background: {% if mem_pct > 85 %}var(--danger){% elif mem_pct > 65 %}var(--warning){% else %}var(--success){% endif %};"></div>
+            </div>
+        </div>
+        <div class="card" style="padding: 0.75rem 1rem;">
+            <div class="stat-label">CPU belegt</div>
+            <div class="stat-value">
+                {{ capacity.used_cpu | default(0) }}
+                <span style="color: var(--text-muted); font-weight: 400;">
+                    / {{ capacity.total_cpu | default(0) }} Cores
+                </span>
+            </div>
+            <div class="progress-bar" style="margin-top: 0.5rem;">
+                {% set cpu_pct = capacity.cpu_percent | default(0) %}
+                <div class="progress-fill" style="width: {{ cpu_pct }}%;
+                    background: {% if cpu_pct > 85 %}var(--danger){% elif cpu_pct > 65 %}var(--warning){% else %}var(--success){% endif %};"></div>
+            </div>
+        </div>
+        <div class="card" style="padding: 0.75rem 1rem;">
+            <div class="stat-label">RAM frei</div>
+            <div class="stat-value" style="color: var(--success);">
+                {{ "%.1f"|format(capacity.free_memory_gb | default(0)) }} GB
+            </div>
+        </div>
+        <div class="card" style="padding: 0.75rem 1rem;">
+            <div class="stat-label">CPU frei</div>
+            <div class="stat-value" style="color: var(--success);">
+                {{ capacity.free_cpu | default(0) }} Cores
+            </div>
+        </div>
+        <div class="card" style="padding: 0.75rem 1rem;">
+            <div class="stat-label">User gesamt</div>
+            <div class="stat-value">{{ capacity.total_users | default(0) }}</div>
+        </div>
+        <div class="card" style="padding: 0.75rem 1rem;">
+            <div class="stat-label">Aktive VMs</div>
+            <div class="stat-value">{{ capacity.active_vms | default(0) }}</div>
+        </div>
+    </div>
+    {% else %}
+    <div class="empty">
+        <p>Keine Kapazitaetsdaten verfuegbar</p>
+        <p style="font-size: 0.875rem; margin-top: 0.5rem;">Admin-Service nicht erreichbar</p>
+    </div>
+    {% endif %}
+</div>
+
+{# --- Kapazitaets-Rechner --- #}
+{% if capacity %}
+<div class="section">
+    <h2>Freie Slots</h2>
+    <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 1rem;">
+        Geschaetzte verfuegbare Slots basierend auf freien Ressourcen
+    </p>
+    <div class="grid grid-3">
+        {% set free_mem = capacity.free_memory_gb | default(0) %}
+        {% set free_cpu = capacity.free_cpu | default(0) %}
+
+        {% if profiles %}
+        {% for pid, p in profiles.items() %}
+        {% set p_mem_gb = (p.memory_mb | default(2048)) / 1024 %}
+        {% set p_cores = p.cores | default(2) %}
+        {% set slots_mem = (free_mem / p_mem_gb) | int %}
+        {% set slots_cpu = (free_cpu / p_cores) | int %}
+        {% set slots = [slots_mem, slots_cpu] | min %}
+        <div class="card">
+            <div class="card-header">
+                <span class="card-title">{{ p.displayName | default(pid | capitalize) }}</span>
+                <span class="badge {% if slots > 2 %}badge-success{% elif slots > 0 %}badge-warning{% else %}badge-danger{% endif %}">
+                    {{ slots }} frei
+                </span>
+            </div>
+            <div style="font-size: 0.85rem; color: var(--text-muted);">
+                {{ p_cores }} Core{{ 's' if p_cores > 1 else '' }},
+                {{ "%.0f"|format(p_mem_gb) }} GB RAM,
+                {{ p.disk_gb | default(20) }} GB Disk
+            </div>
+            {% if p.description is defined %}
+            <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.25rem;">
+                {{ p.description }}
+            </div>
+            {% endif %}
+        </div>
+        {% endfor %}
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+
+{% endblock %}

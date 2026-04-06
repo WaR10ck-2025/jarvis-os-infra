@@ -1,0 +1,7 @@
+apiVersion: jarvis-os.io/v1
+kind: JarvisTenant
+metadata:
+  name: bob
+spec:
+  username: bob
+  profile: small

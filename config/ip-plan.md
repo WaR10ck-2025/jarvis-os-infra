@@ -23,7 +23,21 @@
 | VM 100 | 100 | windows-obd2 | 192.168.10.220 | Windows 10 KVM | :8006 (noVNC) :3389 (RDP) |
 | LXC 300 | 300 | casaos-lxc-bridge | 192.168.10.180 | FastAPI Bridge | :8200 |
 | LXC 301–399 | 3xx | casaos-app-\* | 192.168.10.181–249 | CasaOS AppStore Apps (dynamisch) | variabel |
-| VM 500 | 500 | k3s-test | 192.168.10.150 | k3s Kubernetes Testcluster | :6443 (API) :30080 (HTTP) :30443 (HTTPS) |
+| LXC 115 | 115 | headscale | 192.168.10.115 | Headscale VPN | :8080 |
+| LXC 125 | 125 | authentik-sso | 192.168.10.125 | Authentik SSO/OIDC | :9000 |
+| LXC 130 | 130 | jarvis-samba | 192.168.10.130 | Samba File-Server | :445 |
+| LXC 135 | 135 | jarvis-mail | 192.168.10.135 | Stalwart Mail | :25 :587 :993 :443 |
+| LXC 160 | 160 | jarvis-admin | 192.168.10.160 | Admin Service (FastAPI) | :8300 |
+| VM 500 | 500 | k3s-test | 192.168.10.150 | k3s Testcluster (LEGACY) | :6443 :30080 :30443 |
+
+## Neue Architektur: VM-per-User (vmbr0 + isolierte Bridges)
+
+| VM | ID | Hostname | IP (intern) | Mgmt-IP (DNAT) | Bridge | Beschreibung |
+|---|---|---|---|---|---|---|
+| Admin-VM | 155 | jarvis-admin-vm | 192.168.10.155 | 192.168.10.155 | vmbr0 | k3s + Admin-Portal + Prometheus + Grafana |
+| User-VM 1 | 1000 | jarvis-alice | 10.1.0.10 | 192.168.10.150 | vmbr1 | User alice (Beispiel) |
+| User-VM 2 | 2000 | jarvis-bob | 10.2.0.10 | 192.168.10.151 | vmbr2 | User bob (Beispiel) |
+| VM-Template | 9003 | jarvis-vm-template | — | — | — | Debian 12 + k3s + Operator + Portal |
 
 ## Externe Geräte (nicht auf Proxmox)
 

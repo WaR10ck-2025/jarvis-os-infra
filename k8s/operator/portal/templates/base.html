@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}J.A.R.V.I.S-OS{% endblock %}</title>
+    <style>
+        :root {
+            --bg: #0a0e17;
+            --bg-card: #111827;
+            --bg-hover: #1f2937;
+            --border: #1e293b;
+            --text: #e2e8f0;
+            --text-muted: #94a3b8;
+            --accent: #3b82f6;
+            --accent-hover: #2563eb;
+            --success: #22c55e;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --danger-hover: #dc2626;
+            --radius: 12px;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+        }
+        nav {
+            background: var(--bg-card);
+            border-bottom: 1px solid var(--border);
+            padding: 0.75rem 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+        nav .logo {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: var(--accent);
+            text-decoration: none;
+        }
+        nav .logo span { color: var(--text-muted); font-weight: 400; font-size: 0.875rem; }
+        nav .nav-links {
+            display: flex;
+            gap: 0.25rem;
+            margin-left: 1rem;
+        }
+        nav .nav-links a {
+            color: var(--text-muted);
+            text-decoration: none;
+            padding: 0.4rem 0.75rem;
+            border-radius: 6px;
+            font-size: 0.875rem;
+            transition: all 0.2s;
+        }
+        nav .nav-links a:hover { background: var(--bg-hover); color: var(--text); }
+        nav .nav-links a.active { background: var(--accent); color: white; }
+        nav .nav-right {
+            margin-left: auto;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            font-size: 0.85rem;
+        }
+        nav .user-badge {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            color: var(--text-muted);
+        }
+        nav .mode-badge {
+            padding: 0.15rem 0.5rem;
+            border-radius: 999px;
+            font-size: 0.7rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        nav .mode-badge.admin { background: rgba(245,158,11,0.2); color: var(--warning); }
+        nav .mode-badge.user { background: rgba(59,130,246,0.15); color: var(--accent); }
+        .container { max-width: 1200px; margin: 0 auto; padding: 2rem 1.5rem; }
+        h1 { font-size: 1.75rem; margin-bottom: 0.5rem; }
+        h2 { font-size: 1.25rem; margin-bottom: 1rem; color: var(--text-muted); }
+        .subtitle { color: var(--text-muted); margin-bottom: 2rem; }
+        .grid { display: grid; gap: 1rem; }
+        .grid-2 { grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); }
+        .grid-3 { grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 1.25rem;
+            transition: border-color 0.2s;
+        }
+        .card:hover { border-color: var(--accent); }
+        .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; }
+        .card-title { font-size: 1.1rem; font-weight: 600; }
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 0.2rem 0.6rem;
+            border-radius: 999px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+        .badge-success { background: rgba(34,197,94,0.15); color: var(--success); }
+        .badge-warning { background: rgba(245,158,11,0.15); color: var(--warning); }
+        .badge-danger { background: rgba(239,68,68,0.15); color: var(--danger); }
+        .badge-info { background: rgba(59,130,246,0.15); color: var(--accent); }
+        .stat { margin-bottom: 0.5rem; }
+        .stat-label { font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+        .stat-value { font-size: 1.1rem; font-weight: 600; }
+        .progress-bar { height: 6px; background: var(--border); border-radius: 3px; margin-top: 0.25rem; overflow: hidden; }
+        .progress-fill { height: 100%; border-radius: 3px; transition: width 0.3s; }
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            padding: 0.5rem 1rem;
+            border: none;
+            border-radius: 8px;
+            font-size: 0.875rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-decoration: none;
+        }
+        .btn-primary { background: var(--accent); color: white; }
+        .btn-primary:hover { background: var(--accent-hover); }
+        .btn-danger { background: var(--danger); color: white; }
+        .btn-danger:hover { background: var(--danger-hover); }
+        .btn-ghost { background: transparent; color: var(--text-muted); border: 1px solid var(--border); }
+        .btn-ghost:hover { background: var(--bg-hover); color: var(--text); }
+        .btn-sm { padding: 0.35rem 0.75rem; font-size: 0.8rem; }
+        .icon { font-size: 1.5rem; }
+        .section { margin-bottom: 2.5rem; }
+        .empty { text-align: center; padding: 3rem; color: var(--text-muted); }
+        .quota-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 0.75rem; }
+        pre.logs {
+            background: #000;
+            color: #22c55e;
+            padding: 1rem;
+            border-radius: var(--radius);
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            font-size: 0.8rem;
+            line-height: 1.5;
+            overflow-x: auto;
+            max-height: 600px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+        table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+        thead tr { border-bottom: 1px solid var(--border); text-align: left; }
+        tbody tr { border-bottom: 1px solid var(--border); }
+        th, td { padding: 0.5rem; }
+        .confirm-dialog {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.7);
+            z-index: 100;
+            align-items: center;
+            justify-content: center;
+        }
+        .confirm-dialog.active { display: flex; }
+        .confirm-box {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 1.5rem;
+            max-width: 400px;
+            width: 90%;
+        }
+        .confirm-box h3 { margin-bottom: 0.75rem; }
+        .confirm-box p { color: var(--text-muted); margin-bottom: 1.25rem; }
+        .confirm-actions { display: flex; gap: 0.5rem; justify-content: flex-end; }
+        input, select {
+            padding: 0.5rem 0.75rem;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            background: var(--bg);
+            color: var(--text);
+            font-size: 0.9rem;
+            outline: none;
+        }
+        input:focus, select:focus { border-color: var(--accent); }
+    </style>
+</head>
+<body>
+    <nav>
+        <a href="/" class="logo">J.A.R.V.I.S-OS <span>Portal</span></a>
+        <div class="nav-links">
+            <a href="/" class="{% block nav_dashboard %}{% endblock %}">Dashboard</a>
+            <a href="/apps" class="{% block nav_apps %}{% endblock %}">App-Store</a>
+            {% if mode == 'admin' %}
+            <a href="/admin/users" class="{% block nav_admin_users %}{% endblock %}">Users</a>
+            <a href="/admin/capacity" class="{% block nav_admin_capacity %}{% endblock %}">Kapazitaet</a>
+            {% endif %}
+        </div>
+        <div class="nav-right">
+            <span class="user-badge">{{ username }}</span>
+            <span class="mode-badge {{ mode }}">{{ mode }}</span>
+        </div>
+    </nav>
+    <div class="container">
+        {% block content %}{% endblock %}
+    </div>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

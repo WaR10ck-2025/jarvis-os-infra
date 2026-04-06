@@ -1,0 +1,159 @@
+# jarvis-operator.yaml — Operator Deployment fuer k3s (hostPath-basiert)
+# Wird automatisch von k3s angewendet wenn in /var/lib/rancher/k3s/server/manifests/
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: jarvis-operator
+  namespace: jarvis-system
+  labels:
+    app.kubernetes.io/name: jarvis-operator
+    app.kubernetes.io/part-of: jarvis-os
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: jarvis-operator
+  labels:
+    app.kubernetes.io/name: jarvis-operator
+    app.kubernetes.io/part-of: jarvis-os
+rules:
+  - apiGroups: ["apiextensions.k8s.io"]
+    resources: ["customresourcedefinitions"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["jarvis-os.io"]
+    resources: ["jarvisapps", "jarvisapps/status"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["services", "persistentvolumeclaims"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["ingresses"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["create", "patch"]
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: jarvis-operator
+  labels:
+    app.kubernetes.io/name: jarvis-operator
+    app.kubernetes.io/part-of: jarvis-os
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: jarvis-operator
+subjects:
+  - kind: ServiceAccount
+    name: jarvis-operator
+    namespace: jarvis-system
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jarvis-operator
+  namespace: jarvis-system
+  labels:
+    app: jarvis-operator
+    app.kubernetes.io/name: jarvis-operator
+    app.kubernetes.io/part-of: jarvis-os
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: jarvis-operator
+  template:
+    metadata:
+      labels:
+        app: jarvis-operator
+        app.kubernetes.io/name: jarvis-operator
+        app.kubernetes.io/part-of: jarvis-os
+    spec:
+      serviceAccountName: jarvis-operator
+      initContainers:
+        - name: install-deps
+          image: python:3.12-slim
+          command: ["/bin/sh", "-c"]
+          args:
+            - pip install --no-cache-dir --target=/deps -r /app/requirements.txt
+          volumeMounts:
+            - name: deps
+              mountPath: /deps
+            - name: operator-code
+              mountPath: /app
+              readOnly: true
+      containers:
+        - name: operator
+          image: python:3.12-slim
+          env:
+            - name: PYTHONPATH
+              value: /deps
+            - name: ADMIN_SERVICE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: jarvis-portal-config
+                  key: ADMIN_SERVICE_URL
+            - name: VM_USERNAME
+              valueFrom:
+                configMapKeyRef:
+                  name: jarvis-portal-config
+                  key: VM_USERNAME
+            - name: VM_MODE
+              valueFrom:
+                configMapKeyRef:
+                  name: jarvis-portal-config
+                  key: VM_MODE
+            - name: CATALOG_PATH
+              value: /opt/jarvis/catalog.json
+            - name: APPS_NAMESPACE
+              value: default
+          command: ["python", "-m", "kopf", "run", "/app/operator.py", "--verbose", "--liveness=http://0.0.0.0:8080/healthz"]
+          ports:
+            - containerPort: 8080
+              name: health
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: health
+            initialDelaySeconds: 15
+            periodSeconds: 30
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+            limits:
+              memory: "256Mi"
+              cpu: "500m"
+          volumeMounts:
+            - name: deps
+              mountPath: /deps
+              readOnly: true
+            - name: operator-code
+              mountPath: /app
+              readOnly: true
+            - name: jarvis-data
+              mountPath: /opt/jarvis
+      volumes:
+        - name: deps
+          emptyDir: {}
+        - name: operator-code
+          hostPath:
+            path: /opt/jarvis/operator
+            type: Directory
+        - name: jarvis-data
+          hostPath:
+            path: /opt/jarvis
+            type: Directory

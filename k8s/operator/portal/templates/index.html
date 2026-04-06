@@ -1,0 +1,187 @@
+{% extends "base.html" %}
+{% block title %}J.A.R.V.I.S-OS — Tenants{% endblock %}
+
+{% block content %}
+
+{# --- Cluster-Kapazitaet --- #}
+<div class="section">
+    <h2>Cluster-Kapazitaet</h2>
+    <div class="quota-grid">
+        <div class="card" style="padding: 0.75rem 1rem;">
+            <div class="stat-label">RAM belegt</div>
+            <div class="stat-value">
+                {{ "%.1f"|format(capacity.usedMemory / (1024**3)) }} Gi
+                <span style="color: var(--text-muted); font-weight: 400;">
+                    / {{ "%.1f"|format(capacity.availableMemory / (1024**3)) }} Gi
+                </span>
+            </div>
+            <div class="progress-bar" style="margin-top: 0.5rem;">
+                <div class="progress-fill" style="width: {{ capacity.memoryPercent }}%;
+                    background: {% if capacity.memoryPercent > 85 %}var(--danger){% elif capacity.memoryPercent > 65 %}var(--warning){% else %}var(--success){% endif %};"></div>
+            </div>
+        </div>
+        <div class="card" style="padding: 0.75rem 1rem;">
+            <div class="stat-label">CPU belegt</div>
+            <div class="stat-value">
+                {{ "%.1f"|format(capacity.usedCPU / 1000) }}
+                <span style="color: var(--text-muted); font-weight: 400;">
+                    / {{ "%.1f"|format(capacity.availableCPU / 1000) }} Cores
+                </span>
+            </div>
+            <div class="progress-bar" style="margin-top: 0.5rem;">
+                <div class="progress-fill" style="width: {{ capacity.cpuPercent }}%;
+                    background: {% if capacity.cpuPercent > 85 %}var(--danger){% elif capacity.cpuPercent > 65 %}var(--warning){% else %}var(--success){% endif %};"></div>
+            </div>
+        </div>
+        <div class="card" style="padding: 0.75rem 1rem;">
+            <div class="stat-label">RAM frei</div>
+            <div class="stat-value" style="color: var(--success);">{{ "%.1f"|format(capacity.freeMemory / (1024**3)) }} Gi</div>
+        </div>
+        <div class="card" style="padding: 0.75rem 1rem;">
+            <div class="stat-label">Tenants</div>
+            <div class="stat-value">{{ tenants | length }}</div>
+        </div>
+    </div>
+</div>
+
+{# --- Tenant erstellen --- #}
+<div class="section">
+    <h2>Neuen Tenant erstellen</h2>
+    <div class="card">
+        <form method="post" action="/tenants/create" id="createForm" style="display: flex; gap: 1rem; align-items: flex-end; flex-wrap: wrap;">
+            <div style="flex: 1; min-width: 200px;">
+                <label class="stat-label" for="username" style="display: block; margin-bottom: 0.4rem;">Username</label>
+                <input type="text" name="username" id="username" required
+                    pattern="^[a-z][a-z0-9-]{1,30}[a-z0-9]$"
+                    placeholder="z.B. alice, bob-admin"
+                    style="width: 100%; padding: 0.5rem 0.75rem; border-radius: 8px; border: 1px solid var(--border);
+                           background: var(--bg); color: var(--text); font-size: 0.9rem; outline: none;"
+                    onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border)'">
+            </div>
+            <div style="min-width: 180px;">
+                <label class="stat-label" for="profile" style="display: block; margin-bottom: 0.4rem;">Profil</label>
+                <select name="profile" id="profile" onchange="updateProfileInfo()"
+                    style="width: 100%; padding: 0.5rem 0.75rem; border-radius: 8px; border: 1px solid var(--border);
+                           background: var(--bg); color: var(--text); font-size: 0.9rem; cursor: pointer; outline: none;"
+                    onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border)'">
+                    {% for pid, p in profiles.items() %}
+                    <option value="{{ pid }}" {{ 'selected' if pid == 'medium' else '' }}>
+                        {{ p.displayName | default(pid | capitalize) }} — {{ p.memoryLimit }} RAM, {{ p.cpuLimit }} CPU
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <button type="submit" class="btn btn-primary">Erstellen</button>
+        </form>
+        <div id="profileInfo" style="margin-top: 0.75rem; font-size: 0.8rem; color: var(--text-muted);">
+            {% for pid, p in profiles.items() %}
+            <span class="profile-desc" data-profile="{{ pid }}" style="{{ '' if pid == 'medium' else 'display:none;' }}">
+                {{ p.description | default('') }} &middot;
+                Storage: {{ p.storageQuota | default('30Gi') }} &middot;
+                Max {{ p.appSlotLimit | default(5) }} Apps
+            </span>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+{# --- Tenant-Liste --- #}
+<div class="section">
+    <h2>Tenants</h2>
+    {% if tenants %}
+    <div class="grid grid-3">
+        {% for tenant in tenants %}
+        {% set username = tenant.spec.username %}
+        {% set phase = tenant.status.phase if tenant.status else 'Pending' %}
+        {% set profile = tenant.spec.profile if tenant.spec.profile is defined else 'medium' %}
+        {% set app_count = tenant.status.appCount if tenant.status and tenant.status.appCount is defined else 0 %}
+        {% set ns = tenant.status.namespace if tenant.status else 'user-' + username %}
+        <div class="card" style="position: relative;">
+            <a href="/tenant/{{ tenant.metadata.name }}" style="text-decoration: none; color: inherit; display: block;">
+                <div class="card-header">
+                    <span class="card-title">{{ username }}</span>
+                    <div style="display: flex; gap: 0.4rem; align-items: center;">
+                        <span class="badge badge-info">{{ profile }}</span>
+                        {% if phase == 'Ready' %}
+                        <span class="badge badge-success">Ready</span>
+                        {% elif phase == 'Error' %}
+                        <span class="badge badge-danger">Error</span>
+                        {% else %}
+                        <span class="badge badge-warning">{{ phase }}</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div style="display: flex; gap: 1.5rem;">
+                    <div class="stat">
+                        <div class="stat-label">Apps</div>
+                        <div class="stat-value">{{ app_count }}</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-label">CPU-Limit</div>
+                        <div class="stat-value">{{ tenant.spec.cpuLimit | default(profiles[profile].cpuLimit if profile in profiles else '2') }}</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-label">RAM-Limit</div>
+                        <div class="stat-value">{{ tenant.spec.memoryLimit | default(profiles[profile].memoryLimit if profile in profiles else '2Gi') }}</div>
+                    </div>
+                </div>
+                <div style="margin-top: 0.5rem; color: var(--text-muted); font-size: 0.8rem;">
+                    Namespace: {{ ns }}
+                </div>
+            </a>
+            <form method="post" action="/tenants/delete/{{ tenant.metadata.name }}" style="position: absolute; top: 1rem; right: 1rem;"
+                  onsubmit="return showConfirm(event, '{{ username }}', this);">
+                <button type="submit" class="btn btn-ghost btn-sm" style="padding: 0.2rem 0.5rem; font-size: 0.7rem; color: var(--danger);"
+                        title="Tenant loeschen">&#10005;</button>
+            </form>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty">
+        <p>Keine Tenants vorhanden</p>
+        <p style="font-size: 0.875rem; margin-top: 0.5rem;">Erstelle oben deinen ersten Tenant</p>
+    </div>
+    {% endif %}
+</div>
+
+{# --- Confirm Dialog --- #}
+<div id="confirmDialog" class="confirm-dialog">
+    <div class="confirm-box">
+        <h3>Tenant loeschen?</h3>
+        <p id="confirmText">Bist du sicher?</p>
+        <div class="confirm-actions">
+            <button class="btn btn-ghost btn-sm" onclick="hideConfirm()">Abbrechen</button>
+            <button class="btn btn-danger btn-sm" id="confirmBtn" onclick="doDelete()">Loeschen</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function updateProfileInfo() {
+    const sel = document.getElementById('profile').value;
+    document.querySelectorAll('.profile-desc').forEach(el => {
+        el.style.display = el.dataset.profile === sel ? '' : 'none';
+    });
+}
+
+let pendingForm = null;
+function showConfirm(event, name, form) {
+    event.preventDefault();
+    pendingForm = form;
+    document.getElementById('confirmText').textContent =
+        `Tenant "${name}" und ALLE zugehoerigen Apps, Daten und der Namespace werden unwiderruflich geloescht.`;
+    document.getElementById('confirmDialog').classList.add('active');
+    return false;
+}
+function hideConfirm() {
+    document.getElementById('confirmDialog').classList.remove('active');
+    pendingForm = null;
+}
+function doDelete() {
+    if (pendingForm) pendingForm.submit();
+}
+</script>
+{% endblock %}

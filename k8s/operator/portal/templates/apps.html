@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% block title %}App-Store — J.A.R.V.I.S-OS{% endblock %}
+{% block nav_apps %}active{% endblock %}
+
+{% block content %}
+
+<div class="section">
+    <h1>App-Store</h1>
+    <p class="subtitle">Verfuegbare Apps fuer deine VM — Ein-Klick-Installation</p>
+</div>
+
+<div class="section">
+    <div class="grid grid-3">
+        {% for cat_id, cat in catalog.items() %}
+        {% set is_installed = cat_id in installed %}
+        <div class="card">
+            <div class="card-header">
+                <span>
+                    <span class="icon">{{ cat.icon }}</span>
+                    <span class="card-title" style="margin-left: 0.25rem;">{{ cat.name }}</span>
+                </span>
+                {% if is_installed %}
+                <span class="badge badge-success">Installiert</span>
+                {% endif %}
+            </div>
+            <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0.75rem;">
+                {{ cat.description }}
+            </p>
+            <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 1rem; display: flex; gap: 0.75rem; flex-wrap: wrap;">
+                {% if cat.persistence is defined and cat.persistence.enabled %}
+                <span>Storage: {{ cat.persistence.size }}</span>
+                {% else %}
+                <span>Kein Storage</span>
+                {% endif %}
+                {% if cat.resources is defined and cat.resources.limits is defined %}
+                <span>RAM: {{ cat.resources.limits.memory }}</span>
+                <span>CPU: {{ cat.resources.limits.cpu }}</span>
+                {% endif %}
+            </div>
+            {% if is_installed %}
+            <div style="display: flex; gap: 0.5rem;">
+                <a href="/" class="btn btn-ghost btn-sm">Zum Dashboard</a>
+                <form method="post" action="/delete/{{ cat_id }}" style="display:inline;"
+                      onsubmit="return showConfirm(event, '{{ cat.name }}', this);">
+                    <button type="submit" class="btn btn-danger btn-sm">Deinstallieren</button>
+                </form>
+            </div>
+            {% else %}
+            <form method="post" action="/deploy/{{ cat_id }}" style="display:inline;">
+                <button type="submit" class="btn btn-primary btn-sm">Installieren</button>
+            </form>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+{% if not catalog %}
+<div class="empty">
+    <p>Kein App-Katalog verfuegbar</p>
+    <p style="font-size: 0.875rem; margin-top: 0.5rem;">
+        Der Operator synchronisiert den Katalog automatisch vom Admin-Service.
+    </p>
+</div>
+{% endif %}
+
+{# --- Confirm Dialog --- #}
+<div id="confirmDialog" class="confirm-dialog">
+    <div class="confirm-box">
+        <h3>App deinstallieren?</h3>
+        <p id="confirmText">Bist du sicher?</p>
+        <div class="confirm-actions">
+            <button class="btn btn-ghost btn-sm" onclick="hideConfirm()">Abbrechen</button>
+            <button class="btn btn-danger btn-sm" onclick="doDelete()">Deinstallieren</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let pendingForm = null;
+function showConfirm(event, appName, form) {
+    event.preventDefault();
+    pendingForm = form;
+    document.getElementById('confirmText').textContent = `App "${appName}" und alle zugehoerigen Daten werden geloescht.`;
+    document.getElementById('confirmDialog').classList.add('active');
+    return false;
+}
+function hideConfirm() {
+    document.getElementById('confirmDialog').classList.remove('active');
+    pendingForm = null;
+}
+function doDelete() {
+    if (pendingForm) pendingForm.submit();
+}
+</script>
+{% endblock %}

@@ -1,0 +1,113 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: jarvis-portal
+  namespace: jarvis-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: jarvis-portal
+rules:
+  # CRDs lesen und schreiben (Apps deployen/loeschen)
+  - apiGroups: ["jarvis-os.io"]
+    resources: ["jarvistenants", "jarvisapps"]
+    verbs: ["get", "list", "watch", "create", "delete"]
+  - apiGroups: ["jarvis-os.io"]
+    resources: ["jarvistenants/status", "jarvisapps/status"]
+    verbs: ["get"]
+  # Pods und Logs lesen
+  - apiGroups: [""]
+    resources: ["pods", "pods/log", "namespaces", "resourcequotas"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: jarvis-portal
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: jarvis-portal
+subjects:
+  - kind: ServiceAccount
+    name: jarvis-portal
+    namespace: jarvis-system
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jarvis-portal
+  namespace: jarvis-system
+  labels:
+    app: jarvis-portal
+    app.kubernetes.io/part-of: jarvis-os
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: jarvis-portal
+  template:
+    metadata:
+      labels:
+        app: jarvis-portal
+        app.kubernetes.io/part-of: jarvis-os
+    spec:
+      serviceAccountName: jarvis-portal
+      containers:
+        - name: portal
+          image: ghcr.io/war10ck-2025/jarvis-portal:latest
+          ports:
+            - containerPort: 8080
+              name: http
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "25m"
+            limits:
+              memory: "256Mi"
+              cpu: "500m"
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 30
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: jarvis-portal
+  namespace: jarvis-system
+spec:
+  selector:
+    app: jarvis-portal
+  ports:
+    - port: 8080
+      targetPort: http
+      name: http
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: jarvis-portal
+  namespace: jarvis-system
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: portal.k8s.jarvis.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: jarvis-portal
+                port:
+                  number: 8080

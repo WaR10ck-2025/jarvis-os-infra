@@ -1,0 +1,161 @@
+# jarvis-portal.yaml — Portal Deployment fuer k3s (hostPath-basiert)
+# Wird automatisch von k3s angewendet wenn in /var/lib/rancher/k3s/server/manifests/
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: jarvis-portal
+  namespace: jarvis-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: jarvis-portal
+rules:
+  - apiGroups: ["jarvis-os.io"]
+    resources: ["jarvisapps", "jarvisapps/status"]
+    verbs: ["get", "list", "watch", "create", "delete"]
+  - apiGroups: [""]
+    resources: ["pods", "pods/log", "namespaces"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: jarvis-portal
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: jarvis-portal
+subjects:
+  - kind: ServiceAccount
+    name: jarvis-portal
+    namespace: jarvis-system
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jarvis-portal
+  namespace: jarvis-system
+  labels:
+    app: jarvis-portal
+    app.kubernetes.io/part-of: jarvis-os
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: jarvis-portal
+  template:
+    metadata:
+      labels:
+        app: jarvis-portal
+        app.kubernetes.io/part-of: jarvis-os
+    spec:
+      serviceAccountName: jarvis-portal
+      initContainers:
+        - name: install-deps
+          image: python:3.12-slim
+          command: ["/bin/sh", "-c"]
+          args:
+            - pip install --no-cache-dir --target=/deps -r /app/requirements.txt
+          volumeMounts:
+            - name: deps
+              mountPath: /deps
+            - name: portal-code
+              mountPath: /app
+              readOnly: true
+      containers:
+        - name: portal
+          image: python:3.12-slim
+          env:
+            - name: PYTHONPATH
+              value: /deps
+            - name: VM_MODE
+              valueFrom:
+                configMapKeyRef:
+                  name: jarvis-portal-config
+                  key: VM_MODE
+            - name: VM_USERNAME
+              valueFrom:
+                configMapKeyRef:
+                  name: jarvis-portal-config
+                  key: VM_USERNAME
+            - name: VM_PROFILE
+              valueFrom:
+                configMapKeyRef:
+                  name: jarvis-portal-config
+                  key: VM_PROFILE
+            - name: ADMIN_SERVICE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: jarvis-portal-config
+                  key: ADMIN_SERVICE_URL
+            - name: ADMIN_API_KEY
+              valueFrom:
+                configMapKeyRef:
+                  name: jarvis-portal-config
+                  key: ADMIN_API_KEY
+                  optional: true
+            - name: CATALOG_PATH
+              value: /opt/jarvis/catalog.json
+            - name: APPS_NAMESPACE
+              value: default
+          command: ["python", "-m", "uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8080", "--app-dir", "/app"]
+          ports:
+            - containerPort: 8080
+              name: http
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 30
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "25m"
+            limits:
+              memory: "256Mi"
+              cpu: "500m"
+          volumeMounts:
+            - name: deps
+              mountPath: /deps
+              readOnly: true
+            - name: portal-code
+              mountPath: /app
+              readOnly: true
+            - name: jarvis-data
+              mountPath: /opt/jarvis
+              readOnly: true
+      volumes:
+        - name: deps
+          emptyDir: {}
+        - name: portal-code
+          hostPath:
+            path: /opt/jarvis/portal
+            type: Directory
+        - name: jarvis-data
+          hostPath:
+            path: /opt/jarvis
+            type: Directory
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: jarvis-portal
+  namespace: jarvis-system
+spec:
+  type: NodePort
+  selector:
+    app: jarvis-portal
+  ports:
+    - port: 8080
+      targetPort: http
+      nodePort: 30080
+      name: http

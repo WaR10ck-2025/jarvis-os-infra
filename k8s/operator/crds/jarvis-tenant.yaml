@@ -29,24 +29,25 @@ spec:
                   type: string
                   pattern: "^[a-z][a-z0-9-]{1,30}[a-z0-9]$"
                   description: "Lowercase username, wird zu Namespace user-{username}"
+                profile:
+                  type: string
+                  enum: ["small", "medium", "large"]
+                  default: "medium"
+                  description: "Hardware-Profil (definiert Quotas/Limits via ConfigMap)"
                 storageQuota:
                   type: string
-                  default: "50Gi"
-                  description: "Max Storage fuer den Tenant (z.B. 100Gi)"
+                  description: "Max Storage (ueberschreibt Profil-Default)"
                 cpuLimit:
                   type: string
-                  default: "4"
-                  description: "Max CPU-Cores fuer den Tenant"
+                  description: "Max CPU-Cores (ueberschreibt Profil-Default)"
                 memoryLimit:
                   type: string
-                  default: "8Gi"
-                  description: "Max RAM fuer den Tenant"
+                  description: "Max RAM (ueberschreibt Profil-Default)"
                 appSlotLimit:
                   type: integer
-                  default: 10
                   minimum: 1
                   maximum: 50
-                  description: "Max Anzahl JarvisApps in diesem Namespace"
+                  description: "Max Anzahl JarvisApps (ueberschreibt Profil-Default)"
                 tailscaleEnabled:
                   type: boolean
                   default: false
@@ -63,6 +64,8 @@ spec:
                   enum: ["Pending", "Ready", "Error", "Deleting"]
                 namespace:
                   type: string
+                profile:
+                  type: string
                 message:
                   type: string
                 appCount:
@@ -76,6 +79,9 @@ spec:
         - name: Username
           type: string
           jsonPath: .spec.username
+        - name: Profile
+          type: string
+          jsonPath: .spec.profile
         - name: Phase
           type: string
           jsonPath: .status.phase

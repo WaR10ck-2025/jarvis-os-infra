@@ -1,0 +1,139 @@
+# prometheus-config.yaml — Prometheus Konfiguration fuer Admin-VM
+#
+# Deployment als k3s Auto-Deploy-Manifest in der Admin-VM.
+# Scraped: Proxmox-Host, Admin-Service, User-VMs (via Service-Discovery).
+#
+# Pfad in VM-Template: /var/lib/rancher/k3s/server/manifests/prometheus.yaml
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: jarvis-system
+  labels:
+    app.kubernetes.io/name: prometheus
+    app.kubernetes.io/part-of: jarvis-os
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 30s
+      evaluation_interval: 30s
+
+    # ── Scrape-Jobs ─────────────────────────────────────────────
+
+    scrape_configs:
+      # Prometheus self-monitoring
+      - job_name: "prometheus"
+        static_configs:
+          - targets: ["localhost:9090"]
+
+      # Proxmox-Host Node-Exporter
+      - job_name: "proxmox-host"
+        static_configs:
+          - targets: ["192.168.10.147:9100"]
+            labels:
+              instance: "proxmox"
+              role: "hypervisor"
+
+      # Admin-Service Metriken (LXC 160)
+      - job_name: "admin-service"
+        static_configs:
+          - targets: ["192.168.10.160:8300"]
+        metrics_path: /metrics
+        scrape_interval: 60s
+
+      # Admin-VM eigene Metriken (Node-Exporter)
+      - job_name: "admin-vm"
+        static_configs:
+          - targets: ["localhost:9100"]
+            labels:
+              role: "admin"
+
+      # User-VMs (dynamisch via Admin-Service Service-Discovery)
+      # Admin-Service liefert Targets unter /api/v1/prometheus/targets
+      - job_name: "user-vms"
+        http_sd_configs:
+          - url: "http://192.168.10.160:8300/api/v1/prometheus/targets"
+            refresh_interval: 60s
+        relabel_configs:
+          - source_labels: [__meta_user]
+            target_label: user
+          - source_labels: [__meta_vm_id]
+            target_label: vm_id
+          - source_labels: [__meta_profile]
+            target_label: profile
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus
+  namespace: jarvis-system
+  labels:
+    app: prometheus
+    app.kubernetes.io/name: prometheus
+    app.kubernetes.io/part-of: jarvis-os
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prometheus
+  template:
+    metadata:
+      labels:
+        app: prometheus
+    spec:
+      containers:
+        - name: prometheus
+          image: prom/prometheus:v2.53.0
+          args:
+            - "--config.file=/etc/prometheus/prometheus.yml"
+            - "--storage.tsdb.path=/prometheus"
+            - "--storage.tsdb.retention.time=14d"
+            - "--web.enable-lifecycle"
+          ports:
+            - containerPort: 9090
+              name: http
+          volumeMounts:
+            - name: config
+              mountPath: /etc/prometheus
+            - name: data
+              mountPath: /prometheus
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+      volumes:
+        - name: config
+          configMap:
+            name: prometheus-config
+        - name: data
+          persistentVolumeClaim:
+            claimName: prometheus-data
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: prometheus-data
+  namespace: jarvis-system
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus
+  namespace: jarvis-system
+spec:
+  type: ClusterIP
+  selector:
+    app: prometheus
+  ports:
+    - port: 9090
+      targetPort: 9090
+      name: http

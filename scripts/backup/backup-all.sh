@@ -83,6 +83,16 @@ if echo "$RUN_LAYERS" | grep -q "2"; then
     LAYER2_STATUS="error"
     log_err "Layer 2 fehlgeschlagen"
   fi
+
+  # Layer 2b: User-VMs + ZFS-Snapshots (Per-VM-Architektur)
+  if [ -f "${SCRIPT_DIR}/backup-user-vms.sh" ]; then
+    log "► Layer 2b: User-VM Backup + ZFS-Snapshots..."
+    if stdbuf -oL bash "${SCRIPT_DIR}/backup-user-vms.sh" 2>&1 | stdbuf -oL tee -a "$LOG_FILE"; then
+      log_ok "Layer 2b abgeschlossen"
+    else
+      log_warn "Layer 2b (User-VMs) hatte Fehler — nicht kritisch"
+    fi
+  fi
 fi
 
 # ── Zusammenfassung ───────────────────────────────────────────────────────────
