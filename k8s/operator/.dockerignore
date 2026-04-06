@@ -1,0 +1,7 @@
+portal/
+crds/
+deploy/
+examples/
+__pycache__/
+*.pyc
+.git
