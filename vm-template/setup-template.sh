@@ -289,13 +289,18 @@ FBEOF
 chmod +x /opt/jarvis/firstboot.sh
 
 # systemd-Service fuer firstboot
-# WICHTIG: After=cloud-final.service — sonst laeuft firstboot bevor cloud-init
-# das Netzwerk via netplan konfiguriert hat (eth0 hat dann nur Link-Local).
+# WICHTIG: cloud-init.target als Sync-Punkt verwenden, NICHT multi-user.target.
+# cloud-final.service hat After=multi-user.target — das wuerde einen Ordering-
+# Cycle erzeugen (multi-user → firstboot → cloud-final → multi-user) und systemd
+# loescht den firstboot-Job aus dem Boot-Plan.
+# cloud-init.target ist der von cloud-init dokumentierte "nach cloud-init"
+# Sync-Punkt (siehe Kommentar in /lib/systemd/system/cloud-init.target).
+# Auch KEIN After=k3s.service — k3s.service haengt transitiv an multi-user.target.
 cat > /etc/systemd/system/jarvis-firstboot.service << 'EOF'
 [Unit]
 Description=J.A.R.V.I.S-OS First Boot Configuration
-After=cloud-final.service network-online.target k3s.service
-Wants=network-online.target cloud-final.service
+After=cloud-init.target network-online.target
+Wants=cloud-init.target network-online.target
 ConditionPathExists=!/opt/jarvis/.firstboot-done
 
 [Service]
@@ -307,7 +312,7 @@ StandardError=journal+console
 TimeoutStartSec=300
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=cloud-init.target
 EOF
 
 systemctl enable jarvis-firstboot.service
