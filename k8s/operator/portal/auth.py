@@ -72,10 +72,9 @@ else:
 def setup_auth(app):
     """Registriert Session-Middleware und Auth-Routen auf der FastAPI-App."""
 
-    # Session-Middleware fuer Cookie-basierte Sessions
-    app.add_middleware(SessionMiddleware, secret_key=SESSION_SECRET)
-
     if not OIDC_ENABLED:
+        # Session-Middleware trotzdem registrieren (fuer auth_user=None Template-Kontext)
+        app.add_middleware(SessionMiddleware, secret_key=SESSION_SECRET)
         return
 
     @app.middleware("http")
@@ -147,6 +146,11 @@ def setup_auth(app):
             )
 
         return RedirectResponse(url="/auth/login")
+
+    # SessionMiddleware MUSS nach auth_middleware registriert werden.
+    # add_middleware() fuegt aussen hinzu → zuletzt hinzugefuegt = laeuft zuerst.
+    # So ist die Reihenfolge: Request → SessionMiddleware → auth_middleware → App
+    app.add_middleware(SessionMiddleware, secret_key=SESSION_SECRET)
 
 
 def get_current_user(request: Request) -> dict | None:
