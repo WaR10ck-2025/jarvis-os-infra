@@ -181,7 +181,7 @@ def _create_app(namespace: str, app_name: str, catalog_id: str):
         "kind": "JarvisApp",
         "metadata": {"name": app_name, "namespace": namespace},
         "spec": {
-            "appId": name,
+            "appId": catalog_id,
             "image": image,
             "port": port,
             "ingress": {"enabled": True, "host": host},

@@ -1,9 +1,0 @@
-apiVersion: jarvis-os.io/v1
-kind: JarvisTenant
-metadata:
-  name: alice
-spec:
-  username: alice
-  profile: medium
-  tailscaleEnabled: true
-  dashboardEnabled: true

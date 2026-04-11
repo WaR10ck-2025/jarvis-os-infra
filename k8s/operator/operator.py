@@ -15,6 +15,7 @@ Aenderungen gegenueber Shared-K8s-Version:
 import datetime
 import json
 import os
+import re
 import kopf
 import kubernetes
 import logging
@@ -168,15 +169,27 @@ def app_delete(spec, name, namespace, **_):
 # Container-Deployment
 # ---------------------------------------------------------------------------
 
+def _slugify(value: str) -> str:
+    """Konvertiert einen String in einen gültigen K8s Label/Container-Name.
+
+    'Stirling PDF' → 'stirling-pdf', 'IT Tools' → 'it-tools'
+    """
+    s = value.lower().strip()
+    s = re.sub(r"[^a-z0-9]+", "-", s)
+    return s.strip("-")
+
+
 def _deploy_container(namespace, name, app_id, image, port, spec, patch):
     """Erstellt Deployment + Service + Ingress fuer eine Container-App."""
     apps_api = kubernetes.client.AppsV1Api()
     api = kubernetes.client.CoreV1Api()
     net_api = kubernetes.client.NetworkingV1Api()
 
+    app_slug = _slugify(app_id)
+
     labels = {
         "app": name,
-        "app.kubernetes.io/name": app_id.lower(),
+        "app.kubernetes.io/name": app_slug,
         "app.kubernetes.io/managed-by": "jarvis-operator",
         "app.kubernetes.io/part-of": "jarvis-os",
     }
@@ -243,7 +256,7 @@ def _deploy_container(namespace, name, app_id, image, port, spec, patch):
                 spec=kubernetes.client.V1PodSpec(
                     containers=[
                         kubernetes.client.V1Container(
-                            name=app_id.lower(),
+                            name=app_slug,
                             image=image,
                             ports=[
                                 kubernetes.client.V1ContainerPort(
