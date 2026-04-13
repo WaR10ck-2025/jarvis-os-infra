@@ -192,6 +192,7 @@ if [ -d "$BUILD_MANIFESTS" ]; then
     cp "$BUILD_MANIFESTS/jarvis-portal.yaml"             "$MANIFESTS_DIR/" 2>/dev/null || echo "    (portal: skipped)"
     cp "$BUILD_MANIFESTS/jarvis-monitoring.yaml"         "$MANIFESTS_DIR/" 2>/dev/null || echo "    (monitoring: skipped)"
     cp "$BUILD_MANIFESTS/jarvis-grafana-dashboards.yaml" "$MANIFESTS_DIR/" 2>/dev/null || echo "    (grafana: skipped)"
+    cp "$BUILD_MANIFESTS/jarvis-agent.yaml"              "$MANIFESTS_DIR/" 2>/dev/null || echo "    (agent: skipped)"
 else
     echo "  WARNUNG: $BUILD_MANIFESTS nicht gefunden — nur namespace + CRD installiert!"
     echo "  Beim Template-Build muessen die Manifeste vorher dorthin kopiert werden:"
@@ -231,7 +232,24 @@ echo "Modus: $VM_MODE"
 # 1. Hostname setzen
 hostnamectl set-hostname "jarvis-${VM_USERNAME}"
 
-# 2. k3s Node-IP via /etc/rancher/k3s/config.yaml setzen
+# 2. ghcr.io Registry-Auth (wenn GHCR_TOKEN vorhanden — fuer private Images)
+if [ -n "${GHCR_TOKEN:-}" ]; then
+    echo "Konfiguriere ghcr.io Registry-Auth..."
+    mkdir -p /etc/rancher/k3s
+    cat > /etc/rancher/k3s/registries.yaml << REGEOF
+mirrors:
+  ghcr.io:
+    endpoint:
+      - "https://ghcr.io"
+configs:
+  "ghcr.io":
+    auth:
+      username: war10ck-2025
+      password: "${GHCR_TOKEN}"
+REGEOF
+fi
+
+# 3. k3s Node-IP via /etc/rancher/k3s/config.yaml setzen
 # Cloud-init hat netplan bereits angewendet — eth0 sollte die richtige IP haben.
 # k3s liest config.yaml beim Start; persistenter als sed auf systemd-Service.
 CURRENT_IP=$(ip -4 addr show eth0 2>/dev/null | grep -oP '(?<=inet\s)\d+(\.\d+){3}' || echo "$VM_IP")
@@ -245,7 +263,7 @@ CFGEOF
     systemctl restart k3s
 fi
 
-# 3. Warten bis k3s bereit
+# 4. Warten bis k3s bereit
 echo "Warte auf k3s..."
 export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
 for i in $(seq 1 60); do
@@ -256,7 +274,7 @@ for i in $(seq 1 60); do
     sleep 2
 done
 
-# 4. Portal-Konfiguration injizieren
+# 5. Portal-Konfiguration injizieren
 kubectl create configmap jarvis-portal-config \
     --from-literal=ADMIN_SERVICE_URL="$ADMIN_SERVICE_URL" \
     --from-literal=VM_USERNAME="$VM_USERNAME" \
@@ -264,7 +282,26 @@ kubectl create configmap jarvis-portal-config \
     --from-literal=VM_PROFILE="$VM_PROFILE" \
     -n jarvis-system --dry-run=client -o yaml | kubectl apply -f -
 
-# 5. Tailscale registrieren (wenn Key vorhanden)
+# 6. Agent-Secrets injizieren (wenn agent-secrets.env vorhanden)
+AGENT_SECRETS="/opt/jarvis/agent-secrets.env"
+if [ -f "$AGENT_SECRETS" ]; then
+    echo "Erstelle jarvis-agent-secrets..."
+    source "$AGENT_SECRETS"
+    kubectl create secret generic jarvis-agent-secrets \
+        --from-literal=LLM_PROVIDER="${LLM_PROVIDER:-anthropic}" \
+        --from-literal=OPENAI_API_KEY="${OPENAI_API_KEY:-}" \
+        --from-literal=ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY:-}" \
+        --from-literal=TTS_PROVIDER="${TTS_PROVIDER:-elevenlabs}" \
+        --from-literal=ELEVENLABS_API_KEY="${ELEVENLABS_API_KEY:-}" \
+        --from-literal=ELEVENLABS_VOICE_ID="${ELEVENLABS_VOICE_ID:-}" \
+        -n jarvis-system --dry-run=client -o yaml | kubectl apply -f -
+    rm -f "$AGENT_SECRETS"
+    echo "  → jarvis-agent-secrets erstellt (Datei geloescht)"
+else
+    echo "  WARNUNG: $AGENT_SECRETS nicht gefunden — Agent startet ohne API-Keys!"
+fi
+
+# 7. Tailscale registrieren (wenn Key vorhanden)
 if [ -n "${TAILSCALE_AUTH_KEY:-}" ]; then
     echo "Registriere Tailscale..."
     tailscale up --login-server="$HEADSCALE_URL" \
@@ -273,13 +310,13 @@ if [ -n "${TAILSCALE_AUTH_KEY:-}" ]; then
         --hostname="jarvis-${VM_USERNAME}" || true
 fi
 
-# 6. App-Katalog initial laden
+# 8. App-Katalog initial laden
 if [ -n "${ADMIN_SERVICE_URL:-}" ]; then
     echo "Lade App-Katalog..."
     curl -sf "${ADMIN_SERVICE_URL}/api/v1/catalog" > /opt/jarvis/catalog.json 2>/dev/null || true
 fi
 
-# 7. Firstboot-Marker setzen
+# 9. Firstboot-Marker setzen
 touch /opt/jarvis/.firstboot-done
 systemctl disable jarvis-firstboot.service 2>/dev/null || true
 

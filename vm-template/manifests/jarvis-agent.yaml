@@ -1,0 +1,126 @@
+---
+# ServiceAccount for the agent (RBAC for JarvisApp CRDs + pods)
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: jarvis-agent
+  namespace: jarvis-system
+---
+# ClusterRole: manage JarvisApp CRDs and read pods
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: jarvis-agent
+rules:
+  - apiGroups: ["jarvis-os.io"]
+    resources: ["jarvisapps"]
+    verbs: ["get", "list", "watch", "create", "delete"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list"]
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list"]
+  - apiGroups: ["metrics.k8s.io"]
+    resources: ["nodes", "pods"]
+    verbs: ["get", "list"]
+---
+# Bind ClusterRole to ServiceAccount
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: jarvis-agent
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: jarvis-agent
+subjects:
+  - kind: ServiceAccount
+    name: jarvis-agent
+    namespace: jarvis-system
+---
+# ConfigMap (shared with jarvis-portal — injected during provisioning)
+# VM_USERNAME, VM_MODE, ADMIN_SERVICE_URL come from jarvis-portal-config
+# Agent-specific secrets come from jarvis-agent-secrets
+---
+# Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jarvis-agent
+  namespace: jarvis-system
+  labels:
+    app: jarvis-agent
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: jarvis-agent
+  template:
+    metadata:
+      labels:
+        app: jarvis-agent
+    spec:
+      serviceAccountName: jarvis-agent
+      containers:
+        - name: agent
+          image: ghcr.io/war10ck-2025/jarvis-agent:latest
+          ports:
+            - containerPort: 8000
+              name: http
+          envFrom:
+            - secretRef:
+                name: jarvis-agent-secrets
+            - configMapRef:
+                name: jarvis-portal-config
+          env:
+            - name: MEMORY_DB_PATH
+              value: /data/memory.db
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "768Mi"
+              cpu: "500m"
+          volumeMounts:
+            - name: agent-data
+              mountPath: /data
+            - name: whisper-cache
+              mountPath: /root/.cache/huggingface
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 15
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+      volumes:
+        - name: agent-data
+          hostPath:
+            path: /data/appdata/jarvis-agent
+            type: DirectoryOrCreate
+        - name: whisper-cache
+          hostPath:
+            path: /data/appdata/whisper-cache
+            type: DirectoryOrCreate
+---
+# ClusterIP Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: jarvis-agent
+  namespace: jarvis-system
+spec:
+  selector:
+    app: jarvis-agent
+  ports:
+    - port: 8000
+      targetPort: 8000
+      name: http
+  type: ClusterIP
