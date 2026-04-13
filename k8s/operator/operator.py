@@ -34,6 +34,7 @@ VM_USERNAME = os.getenv("VM_USERNAME", "unknown")
 VM_MODE = os.getenv("VM_MODE", "user")  # "user" oder "admin"
 CATALOG_PATH = os.getenv("CATALOG_PATH", "/opt/jarvis/catalog.json")
 APPS_NAMESPACE = os.getenv("APPS_NAMESPACE", "default")  # Apps landen hier
+INGRESS_CLASS = os.getenv("INGRESS_CLASS", "traefik")
 
 
 # ---------------------------------------------------------------------------
@@ -294,14 +295,14 @@ def _deploy_container(namespace, name, app_id, image, port, spec, patch):
     ingress_spec = spec.get("ingress", {})
     if ingress_spec.get("enabled", True):
         host = ingress_spec.get(
-            "host", f"{app_id.lower()}.{namespace}.k8s.jarvis.local"
+            "host", f"{app_id.lower()}.jarvis.local"
         )
         ingress = {
             "apiVersion": "networking.k8s.io/v1",
             "kind": "Ingress",
             "metadata": {"name": name, "namespace": namespace, "labels": labels},
             "spec": {
-                "ingressClassName": "nginx",
+                "ingressClassName": INGRESS_CLASS,
                 "rules": [
                     {
                         "host": host,
@@ -393,7 +394,7 @@ def _deploy_helm(namespace, name, app_id, helm_chart, spec, patch):
     endpoint = f"{name}.{namespace}.svc.cluster.local:{port}"
     if ingress_spec.get("enabled", False):
         host = ingress_spec.get(
-            "host", f"{app_id.lower()}.{namespace}.k8s.jarvis.local"
+            "host", f"{app_id.lower()}.jarvis.local"
         )
         net_api = kubernetes.client.NetworkingV1Api()
         labels = {
@@ -406,7 +407,7 @@ def _deploy_helm(namespace, name, app_id, helm_chart, spec, patch):
             "kind": "Ingress",
             "metadata": {"name": f"{name}-jarvis", "namespace": namespace, "labels": labels},
             "spec": {
-                "ingressClassName": "nginx",
+                "ingressClassName": INGRESS_CLASS,
                 "rules": [
                     {
                         "host": host,
@@ -464,13 +465,15 @@ def _helm_cmd(args):
     """Fuehrt ein Helm-Kommando aus."""
     cmd = ["helm"] + args
     logger.debug("Helm: %s", " ".join(cmd))
+    env = {
+        "HOME": os.getenv("HOME", "/root"),
+        "PATH": "/usr/local/bin:/usr/bin:/bin",
+    }
+    kubeconfig = os.getenv("KUBECONFIG", "")
+    if kubeconfig:
+        env["KUBECONFIG"] = kubeconfig
     return subprocess.run(
-        cmd, capture_output=True, text=True, timeout=600,
-        env={
-            "KUBECONFIG": "/etc/rancher/k3s/k3s.yaml",
-            "HOME": "/root",
-            "PATH": "/usr/local/bin:/usr/bin:/bin",
-        },
+        cmd, capture_output=True, text=True, timeout=600, env=env,
     )
 
 
